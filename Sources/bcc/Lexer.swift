@@ -56,6 +56,8 @@ struct Lexer {
                 throw LexerError.unrecognizedToken(near: snippet)
             }
         }
+        
+        tokens.append(.eof)
 
         return tokens
     }

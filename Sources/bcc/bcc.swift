@@ -18,21 +18,28 @@ struct bcc {
         }
 
         var lexer = Lexer(source: sourceCode)
-
+        let tokens: [Token]
         do {
-            let tokens = try lexer.tokenize()
-
-            for token in tokens {
-                print(token)
-            }
-
-            exit(0)
-
+            tokens = try lexer.tokenize()
         } catch let error as LexerError {
             print(error)
             exit(1)
         } catch {
-            print("An unexpected error occured: \(error)")
+            print("An unexpected lexer error occurred: \(error)")
+            exit(1)
+        }
+
+        var parser = Parser(tokens: tokens)
+        do {
+            let ast = try parser.parse()
+            print(ast)
+            exit(0)
+
+        } catch let error as ParserError {
+            print(error)
+            exit(1)
+        } catch {
+            print("An unexpected parser error occurred: \(error)")
             exit(1)
         }
     }
