@@ -22,8 +22,8 @@ struct FunctionDeclaration: Equatable, CustomStringConvertible {
     let body: Statement
 
     var description: String {
-        let nameLine = "name: \"\(name)\","
-        let bodyLine = "body: \(body.description)"
+        let nameLine = "name=\"\(name)\","
+        let bodyLine = "body=\(body.description)"
         
         return "Function(\n\(indent(nameLine))\n\(indent(bodyLine))\n)"
     }

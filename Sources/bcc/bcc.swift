@@ -4,7 +4,7 @@ import Foundation
 struct bcc {
     static func main() {
         guard CommandLine.arguments.count > 1 else {
-            print("Usage: \(CommandLine.arguments[0]) <source_file.c>")
+            printErr("Usage: \(CommandLine.arguments[0]) <source_file.c>")
             exit(1)
         }
         let filePath = CommandLine.arguments[1]
@@ -13,7 +13,7 @@ struct bcc {
         do {
             sourceCode = try String(contentsOfFile: filePath, encoding: .ascii)
         } catch {
-            print("Error reading file: \(error.localizedDescription)")
+            printErr("Error reading file: \(error.localizedDescription)")
             exit(1)
         }
 
@@ -22,25 +22,31 @@ struct bcc {
         do {
             tokens = try lexer.tokenize()
         } catch let error as LexerError {
-            print(error)
+            printErr(error)
             exit(1)
         } catch {
-            print("An unexpected lexer error occurred: \(error)")
+            printErr("An unexpected lexer error occurred: \(error)")
             exit(1)
         }
 
         var parser = Parser(tokens: tokens)
         do {
             let ast = try parser.parse()
-            print(ast)
+            printErr(ast)
             exit(0)
 
         } catch let error as ParserError {
-            print(error)
-            exit(1)
+            printErr(error)
+            exit(1)  // Exit with 1 for failure
         } catch {
-            print("An unexpected parser error occurred: \(error)")
+            printErr("An unexpected parser error occurred: \(error)")
             exit(1)
         }
     }
+
+    static private func printErr(_ message: Any) {
+    if let data = "\(message)\n".data(using: .utf8) {
+        FileHandle.standardError.write(data)
+    }
+}
 }
