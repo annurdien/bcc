@@ -1,11 +1,9 @@
 import Foundation
 
-// Indent for nested printing
 private func indent(_ s: String) -> String {
     return s.split(separator: "\n").map { "  " + $0 }.joined(separator: "\n")
 }
 
-// <program> ::=<function>
 // Program(function_definition)
 struct Program: Equatable, CustomStringConvertible {
     let function: FunctionDeclaration
@@ -15,7 +13,6 @@ struct Program: Equatable, CustomStringConvertible {
     }
 }
 
-// <function> ::= "int" <identifier> "(" "void" ")" "{" <statement> "}"
 // function_definition = Function(identifier name, statement body)
 struct FunctionDeclaration: Equatable, CustomStringConvertible {
     let name: String
@@ -29,7 +26,6 @@ struct FunctionDeclaration: Equatable, CustomStringConvertible {
     }
 }
 
-// <statement> ::= "return" <exp> ";"
 // statement = Return(exp)
 enum Statement: Equatable, CustomStringConvertible {
     case `return`(Expression)
@@ -42,7 +38,6 @@ enum Statement: Equatable, CustomStringConvertible {
     }
 }
 
-// <exp> ::= <int>
 // exp = Constant(int)
 enum Expression: Equatable, CustomStringConvertible {
     case constant(Int)
