@@ -12,6 +12,11 @@ enum Token: Equatable {
     case openBrace
     case closeBrace
     case semicolon
+    case tilde
+
+    // One or two character tokens
+    case minus
+    case minusMinus
 
     // Tokens with associated values
     case identifier(String)

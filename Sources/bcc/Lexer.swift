@@ -81,6 +81,18 @@ struct Lexer {
         case ";":
             advance()
             return .semicolon
+        case "~":
+            advance()
+            return .tilde
+        case "-":
+            advance()
+
+            if let nextChar = peek(), nextChar == "-" {
+                advance()
+                return .minusMinus
+            } else {
+                return .minus
+            }
 
         default:
             if char.isLetter || char == "_" {
