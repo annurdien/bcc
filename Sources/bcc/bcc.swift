@@ -3,20 +3,25 @@ import Foundation
 @main
 struct bcc {
     static func main() {
+
+        // --- Argument Parsing ---
         let args = CommandLine.arguments
         let flags = args.filter { $0.starts(with: "--") }
         let sourceFileArgs = args.dropFirst().filter { !$0.starts(with: "--") }
-        
+
         let printTokens = flags.contains("--print-tokens")
         let printAST = flags.contains("--print-ast")
         let printTACKY = flags.contains("--print-tacky")
+        let printAsmAst = flags.contains("--print-asm-ast")
 
         guard sourceFileArgs.count == 1 else {
-            printErr("Usage: \(CommandLine.arguments[0]) [--print-tokens | --print-ast | --print-tacky] <source_file.c>")
+            printErr(
+                "Usage: \(CommandLine.arguments[0]) [--print-tokens | --print-ast | --print-tacky | --print-asm-ast] <source_file.c>"
+            )
             exit(1)
         }
         let filePath = sourceFileArgs[0]
-        
+
         let sourceCode: String
         do {
             sourceCode = try String(contentsOfFile: filePath, encoding: .ascii)
@@ -37,7 +42,7 @@ struct bcc {
             printErr("An unexpected lexer error occurred: \(error)")
             exit(1)
         }
-        
+
         if printTokens {
             for token in tokens {
                 print(token)
@@ -66,7 +71,7 @@ struct bcc {
         // MARK: - TACKY Generation
         var tackyGenerator = TACKYGenerator()
         let tackyProgram = tackyGenerator.generate(program: ast)
-        
+
         if printTACKY {
             print(tackyProgram)
             exit(0)
@@ -75,11 +80,16 @@ struct bcc {
         // MARK: - Assembly Generation
         let codeGenerator = AssemblyGenerator()
         let asmProgram = codeGenerator.generate(program: tackyProgram)
-        
+
+        if printAsmAst {
+            print(asmProgram)
+            exit(0)
+        }
+
         // MARK: - Code Emission
         let codeEmitter = CodeEmitter()
         let assemblyCode = codeEmitter.emit(program: asmProgram)
-        
+
         // MARK: - Output the assembly code
         print(assemblyCode)
     }
