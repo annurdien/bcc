@@ -4,6 +4,7 @@ enum ParserError: Error, CustomStringConvertible {
     case expectedToken(String, found: Token)
     case expectedExpression(found: Token)
     case unexpectedToken(Token)
+    case unsupportedUnaryOperator(Token)
 
     var description: String {
         switch self {
@@ -13,6 +14,8 @@ enum ParserError: Error, CustomStringConvertible {
             return "Parser Error: Expected an expression but found \(found)"
         case .unexpectedToken(let found):
             return "Parser Error: Unexpected token \(found) at end of file"
+        case .unsupportedUnaryOperator(let found):
+            return "Parser Error: Unsupported unary operator \(found)"
         }
     }
 }
@@ -53,10 +56,31 @@ struct Parser {
 
     private mutating func parseExpression() throws -> Expression {
         let token = peek()
+
         switch token {
         case .integerLiteral(let value):
             advance()
             return .constant(value)
+
+        case .minus:
+            advance()
+            let innerExp = try parseExpression()
+            return .unary(.negate, innerExp)
+        
+        case .tilde:
+            advance()
+            let innerExp = try parseExpression()
+            return .unary(.bitwiseComplement, innerExp)
+        
+        case .openParen:
+            advance()
+            let innerExp = try parseExpression()
+            try consume(.closeParen)
+            return innerExp
+        
+        case .minusMinus:
+            throw ParserError.unexpectedToken(token)
+        
         default:
             throw ParserError.expectedExpression(found: token)
         }
