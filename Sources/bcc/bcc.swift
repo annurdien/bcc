@@ -3,13 +3,20 @@ import Foundation
 @main
 struct bcc {
     static func main() {
-        // MARK: - Get the source code
-        guard CommandLine.arguments.count > 1 else {
-            printErr("Usage: \(CommandLine.arguments[0]) <source_file.c>")
+        let args = CommandLine.arguments
+        let flags = args.filter { $0.starts(with: "--") }
+        let sourceFileArgs = args.dropFirst().filter { !$0.starts(with: "--") }
+        
+        let printTokens = flags.contains("--print-tokens")
+        let printAST = flags.contains("--print-ast")
+        let printTACKY = flags.contains("--print-tacky")
+
+        guard sourceFileArgs.count == 1 else {
+            printErr("Usage: \(CommandLine.arguments[0]) [--print-tokens | --print-ast | --print-tacky] <source_file.c>")
             exit(1)
         }
-        let filePath = CommandLine.arguments[1]
-
+        let filePath = sourceFileArgs[0]
+        
         let sourceCode: String
         do {
             sourceCode = try String(contentsOfFile: filePath, encoding: .ascii)
@@ -30,32 +37,51 @@ struct bcc {
             printErr("An unexpected lexer error occurred: \(error)")
             exit(1)
         }
+        
+        if printTokens {
+            for token in tokens {
+                print(token)
+            }
+            exit(0)
+        }
 
         // MARK: - Parsing
         var parser = Parser(tokens: tokens)
         let ast: Program
-
         do {
             ast = try parser.parse()
         } catch let error as ParserError {
             printErr(error)
-            exit(1)  // Exit with 1 for failure
+            exit(1)
         } catch {
             printErr("An unexpected parser error occurred: \(error)")
             exit(1)
         }
 
-        // MARK: - ASM-AST Generator
-        let codeGenerator = AssemblyAST()
-        let asmProgram = codeGenerator.generate(program: ast)
+        if printAST {
+            print(ast)
+            exit(0)
+        }
+
+        // MARK: - TACKY Generation
+        var tackyGenerator = TACKYGenerator()
+        let tackyProgram = tackyGenerator.generate(program: ast)
+        
+        if printTACKY {
+            print(tackyProgram)
+            exit(0)
+        }
+
+        // MARK: - Assembly Generation
+        let codeGenerator = AssemblyGenerator()
+        let asmProgram = codeGenerator.generate(program: tackyProgram)
         
         // MARK: - Code Emission
         let codeEmitter = CodeEmitter()
         let assemblyCode = codeEmitter.emit(program: asmProgram)
-
+        
         // MARK: - Output the assembly code
         print(assemblyCode)
-
     }
 
     static private func printErr(_ message: Any) {

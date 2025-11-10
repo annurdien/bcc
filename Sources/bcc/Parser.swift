@@ -70,7 +70,7 @@ struct Parser {
         case .tilde:
             advance()
             let innerExp = try parseExpression()
-            return .unary(.bitwiseComplement, innerExp)
+            return .unary(.complement, innerExp)
         
         case .openParen:
             advance()

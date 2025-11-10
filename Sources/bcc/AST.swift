@@ -41,12 +41,12 @@ enum Statement: Equatable, CustomStringConvertible {
 // unary_operator = Complement | Negate
 enum UnaryOperator: Equatable, CustomStringConvertible {
     case negate
-    case bitwiseComplement
+    case complement
 
     var description: String {
         switch self {
             case .negate: return "Negate"
-            case .bitwiseComplement: return "BitwiseComplement"
+            case .complement: return "Complement"
         }
     }
 }
