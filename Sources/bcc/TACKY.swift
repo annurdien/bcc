@@ -37,11 +37,13 @@ enum TackyValue: Equatable, CustomStringConvertible {
 enum TackyUnaryOperator: Equatable, CustomStringConvertible {
     case negate
     case complement
+    case logicalNot
     
     var description: String {
         switch self {
         case .negate: return "Negate"
         case .complement: return "Complement"
+        case .logicalNot: return "LogicalNot"
         }
     }
 }

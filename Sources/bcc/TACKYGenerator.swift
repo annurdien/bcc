@@ -40,6 +40,7 @@ struct TACKYGenerator {
             let tackyOp: TackyUnaryOperator = switch op {
                 case .negate: .negate
                 case .complement: .complement
+                case .logicalNot: .logicalNot
             }
 
             instructions.append(.unary(op: tackyOp, src: sourceValue, dest: destValue))

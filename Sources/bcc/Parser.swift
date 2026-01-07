@@ -71,6 +71,11 @@ struct Parser {
             advance()
             let innerExp = try parseExpression()
             return .unary(.complement, innerExp)
+
+        case .exclamation:
+            advance()
+            let innerExp = try parseExpression()
+            return .unary(.logicalNot, innerExp)
         
         case .openParen:
             advance()

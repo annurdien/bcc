@@ -59,8 +59,10 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
 
     // Operations (32-bit)
     case movl(AsmOperand, AsmOperand)
+    case cmpl(AsmOperand, AsmOperand)
     case negl(AsmOperand)
     case notl(AsmOperand)
+    case setz(AsmOperand)
     case ret
 
     var description: String {
@@ -79,6 +81,10 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
             return "negl \(op.description)"
         case .notl(let op):
             return "notl \(op.description)"
+        case .cmpl(let src, let dest):
+            return "cmpl \(src.description), \(dest.description)"
+        case .setz(let op):
+            return "setz \(op.description)"
         case .ret:
             return "ret"
         }

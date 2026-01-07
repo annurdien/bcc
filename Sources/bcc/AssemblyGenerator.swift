@@ -47,6 +47,13 @@ struct AssemblyGenerator {
                     instructions.append(.negl(destOperand))
                 case .complement:
                     instructions.append(.notl(destOperand))
+                case .logicalNot:
+                    // 1. Compare with 0
+                    instructions.append(.cmpl(.immediate(0), destOperand))
+                    // 2. Zero out the destination
+                    instructions.append(.movl(.immediate(0), destOperand))
+                    // 3. Set lower byte if equal (zero flag set)
+                    instructions.append(.setz(destOperand))
                 }
             }
         }
@@ -93,6 +100,10 @@ struct AssemblyGenerator {
                 newInstructions.append(.negl(mapOperand(op)))
             case .notl(let op):
                 newInstructions.append(.notl(mapOperand(op)))
+            case .cmpl(let src, let dest):
+                newInstructions.append(.cmpl(mapOperand(src), mapOperand(dest)))
+            case .setz(let op):
+                newInstructions.append(.setz(mapOperand(op)))
             default:
                 newInstructions.append(inst) // .ret, etc.
             }
@@ -115,6 +126,17 @@ struct AssemblyGenerator {
                     finalInstructions.append(.movl(src, .register(.r10d)))
                     // movl %r10d, %dest
                     finalInstructions.append(.movl(.register(.r10d), dest))
+                } else {
+                    finalInstructions.append(inst)
+                }
+
+            // cmpl mem, mem is illegal. Fix it.
+            case .cmpl(let src, let dest):
+                if case .stackOffset = src, case .stackOffset = dest {
+                    // movl %src, %r10d
+                    finalInstructions.append(.movl(src, .register(.r10d)))
+                    // cmpl %r10d, %dest
+                    finalInstructions.append(.cmpl(.register(.r10d), dest))
                 } else {
                     finalInstructions.append(inst)
                 }

@@ -43,10 +43,14 @@ struct CodeEmitter {
             return "  subq \(emit(operand: src, size: .q)), \(emit(operand: dest, size: .q))\n"
         case .movl(let src, let dest):
             return "  movl \(emit(operand: src, size: .l)), \(emit(operand: dest, size: .l))\n"
+        case .cmpl(let src, let dest):
+            return "  cmpl \(emit(operand: src, size: .l)), \(emit(operand: dest, size: .l))\n"
         case .negl(let op):
             return "  negl \(emit(operand: op, size: .l))\n"
         case .notl(let op):
             return "  notl \(emit(operand: op, size: .l))\n"
+        case .setz(let op):
+            return "  setz \(emit(operand: op, size: .b))\n"
         case .ret:
             return "  ret\n"
         }
@@ -62,12 +66,33 @@ struct CodeEmitter {
         case .register(let reg):
             // Select the correct register name based on size
             switch reg {
-            case .rax: return size == .q ? "%rax" : "%eax"
-            case .eax: return size == .l ? "%eax" : "%rax"
+            case .rax:
+                switch size {
+                case .q: return "%rax"
+                case .l: return "%eax"
+                case .b: return "%al"
+                }
+            case .eax:
+                // Assuming eax maps to rax logic, but strictly speaking it's the same register
+                switch size {
+                case .q: return "%rax"
+                case .l: return "%eax"
+                case .b: return "%al"
+                }
             case .rbp: return size == .q ? "%rbp" : "%ebp"
             case .rsp: return size == .q ? "%rsp" : "%esp"
-            case .r10: return size == .q ? "%r10" : "%r10d"
-            case .r10d: return size == .l ? "%r10d" : "%r10"
+            case .r10:
+                switch size {
+                case .q: return "%r10"
+                case .l: return "%r10d"
+                case .b: return "%r10b"
+                }
+            case .r10d:
+                 switch size {
+                case .q: return "%r10"
+                case .l: return "%r10d"
+                case .b: return "%r10b"
+                }
             }
             
         case .stackOffset(let offset):

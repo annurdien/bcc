@@ -84,6 +84,9 @@ struct Lexer {
         case "~":
             advance()
             return .tilde
+        case "!":
+            advance()
+            return .exclamation
         case "-":
             advance()
 
