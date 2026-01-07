@@ -4,6 +4,12 @@ import sys
 import re
 from pathlib import Path
 
+# Get the macOS SDK path once at the start
+try:
+    sdk_path = subprocess.run("xcrun --show-sdk-path", shell=True, capture_output=True, text=True).stdout.strip()
+except:
+    sdk_path = "" # Fallback or handle linux later
+
 def run_command(command):
     try:
         result = subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -42,7 +48,8 @@ def test_file(filepath, expected_return_code):
         return False
 
     # Link
-    cmd3 = f"clang -arch x86_64 {object_file} -o {executable}"
+    sysroot_flag = f"-isysroot {sdk_path}" if sdk_path else ""
+    cmd3 = f"clang -arch x86_64 {sysroot_flag} {object_file} -o {executable}"
     if subprocess.run(cmd3, shell=True).returncode != 0:
         print("FAILED (Linking)")
         return False
