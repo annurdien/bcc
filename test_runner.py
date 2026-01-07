@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import re
 from pathlib import Path
 
 def run_command(command):
@@ -65,6 +66,27 @@ def test_file(filepath, expected_return_code):
         print(f"FAILED (Expected {expected_return_code}, got {return_code})")
         return False
 
+def scan_tests_in_dir(directory):
+    discovered_tests = []
+    # Walk directory to find .c files
+    if not os.path.exists(directory):
+        return []
+        
+    for filename in os.listdir(directory):
+        if not filename.endswith(".c"):
+            continue
+            
+        filepath = os.path.join(directory, filename)
+        with open(filepath, 'r') as f:
+            content = f.read()
+            # Look for // RETURN: {int}
+            match = re.search(r"//\s*RETURN:\s*(\d+)", content)
+            if match:
+                expected_code = int(match.group(1))
+                discovered_tests.append((filepath, expected_code))
+                
+    return discovered_tests
+
 def main():
     # Build compiler first
     print("Building compiler...")
@@ -72,25 +94,19 @@ def main():
         print("Compiler build failed.")
         sys.exit(1)
         
-    tests = [
-        ("tests/valid_bang_0.c", 1),
-        ("tests/valid_bang_5.c", 0),
-        ("tests/valid_bang_nested.c", 1),
-        ("tests/valid_add.c", 3),
-        ("tests/valid_sub.c", 255), # -1 becomes 255 (unsigned byte return code)
-        ("tests/valid_mul.c", 6),
-        ("tests/valid_div.c", 5),
-        ("tests/valid_precedence_1.c", 14),
-        ("tests/valid_precedence_2.c", 20),
-    ]
+    # Discovery
+    final_tests = scan_tests_in_dir("tests")
+    
+    # Sort for consistent output
+    final_tests.sort(key=lambda x: x[0])
     
     passed = 0
-    for test_path, expected in tests:
+    for test_path, expected in final_tests:
         if test_file(Path(test_path), expected):
             passed += 1
             
-    print(f"\n{passed}/{len(tests)} tests passed.")
-    if passed != len(tests):
+    print(f"\n{passed}/{len(final_tests)} tests passed.")
+    if passed != len(final_tests):
         sys.exit(1)
 
 if __name__ == "__main__":

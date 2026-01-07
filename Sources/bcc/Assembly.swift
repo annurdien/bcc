@@ -68,6 +68,15 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
     case negl(AsmOperand)
     case notl(AsmOperand)
     case setz(AsmOperand)
+    case setnz(AsmOperand)
+    case setl(AsmOperand)
+    case setle(AsmOperand)
+    case setg(AsmOperand)
+    case setge(AsmOperand)
+    case jmp(String)
+    case je(String)
+    case jne(String)
+    case label(String)
     case ret
 
     var description: String {
@@ -100,6 +109,24 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
             return "cmpl \(src.description), \(dest.description)"
         case .setz(let op):
             return "setz \(op.description)"
+        case .setnz(let op):
+            return "setnz \(op.description)"
+        case .setl(let op):
+            return "setl \(op.description)"
+        case .setle(let op):
+            return "setle \(op.description)"
+        case .setg(let op):
+            return "setg \(op.description)"
+        case .setge(let op):
+            return "setge \(op.description)"
+        case .jmp(let target):
+            return "jmp \(target)"
+        case .je(let target):
+            return "je \(target)"
+        case .jne(let target):
+            return "jne \(target)"
+        case .label(let name):
+            return "\(name):"
         case .ret:
             return "ret"
         }

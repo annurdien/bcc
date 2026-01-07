@@ -17,6 +17,14 @@ enum Token: Equatable {
     case plus
     case star
     case slash
+    case ampersandAmpersand
+    case pipePipe
+    case equalEqual
+    case exclamationEqual
+    case lessThan
+    case lessThanEqual
+    case greaterThan
+    case greaterThanEqual
 
     // One or two character tokens
     case minus

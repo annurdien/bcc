@@ -89,7 +89,54 @@ struct AssemblyGenerator {
                     instructions.append(.cdq)
                     instructions.append(.idivl(rhsOperand))
                     instructions.append(.movl(.register(.eax), destOperand))
+                
+                case .equal:
+                    instructions.append(.cmpl(rhsOperand, lhsOperand))
+                    instructions.append(.movl(.immediate(0), destOperand))
+                    instructions.append(.setz(destOperand))
+
+                case .notEqual:
+                    instructions.append(.cmpl(rhsOperand, lhsOperand))
+                    instructions.append(.movl(.immediate(0), destOperand))
+                    instructions.append(.setnz(destOperand))
+
+                case .lessThan:
+                    instructions.append(.cmpl(rhsOperand, lhsOperand))
+                    instructions.append(.movl(.immediate(0), destOperand))
+                    instructions.append(.setl(destOperand))
+
+                case .lessThanOrEqual:
+                    instructions.append(.cmpl(rhsOperand, lhsOperand))
+                    instructions.append(.movl(.immediate(0), destOperand))
+                    instructions.append(.setle(destOperand))
+
+                case .greaterThan:
+                    instructions.append(.cmpl(rhsOperand, lhsOperand))
+                    instructions.append(.movl(.immediate(0), destOperand))
+                    instructions.append(.setg(destOperand))
+
+                case .greaterThanOrEqual:
+                    instructions.append(.cmpl(rhsOperand, lhsOperand))
+                    instructions.append(.movl(.immediate(0), destOperand))
+                    instructions.append(.setge(destOperand))
                 }
+
+            case .copy(let src, let dest):
+                instructions.append(.movl(convert(src), convert(dest)))
+
+            case .jump(let target):
+                instructions.append(.jmp(target))
+
+            case .jumpIfZero(let cond, let target):
+                instructions.append(.cmpl(.immediate(0), convert(cond)))
+                instructions.append(.je(target))
+
+            case .jumpIfNotZero(let cond, let target):
+                instructions.append(.cmpl(.immediate(0), convert(cond)))
+                instructions.append(.jne(target))
+
+            case .label(let name):
+                instructions.append(.label(name))
             }
         }
         
@@ -149,6 +196,16 @@ struct AssemblyGenerator {
                 newInstructions.append(.cmpl(mapOperand(src), mapOperand(dest)))
             case .setz(let op):
                 newInstructions.append(.setz(mapOperand(op)))
+            case .setnz(let op):
+                newInstructions.append(.setnz(mapOperand(op)))
+            case .setl(let op):
+                newInstructions.append(.setl(mapOperand(op)))
+            case .setle(let op):
+                newInstructions.append(.setle(mapOperand(op)))
+            case .setg(let op):
+                newInstructions.append(.setg(mapOperand(op)))
+            case .setge(let op):
+                newInstructions.append(.setge(mapOperand(op)))
             default:
                 newInstructions.append(inst) // .ret, etc.
             }
@@ -176,12 +233,17 @@ struct AssemblyGenerator {
                 }
 
             // cmpl mem, mem is illegal. Fix it.
+            // cmpl *, immediate is illegal (destination cannot be immediate)
             case .cmpl(let src, let dest):
                 if case .stackOffset = src, case .stackOffset = dest {
                     // movl %src, %r10d
                     finalInstructions.append(.movl(src, .register(.r10d)))
                     // cmpl %r10d, %dest
                     finalInstructions.append(.cmpl(.register(.r10d), dest))
+                } else if case .immediate = dest {
+                    // cmpl src, $imm -> illegal. Move dest to reg.
+                    finalInstructions.append(.movl(dest, .register(.r10d)))
+                    finalInstructions.append(.cmpl(src, .register(.r10d)))
                 } else {
                     finalInstructions.append(inst)
                 }

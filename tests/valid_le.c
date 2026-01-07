@@ -1,4 +1,4 @@
 // RETURN: 1
 int main(void) {
-    return !!5;
+    return 2 <= 2;
 }

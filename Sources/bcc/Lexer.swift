@@ -86,6 +86,10 @@ struct Lexer {
             return .tilde
         case "!":
             advance()
+            if peek() == "=" {
+                advance()
+                return .exclamationEqual
+            }
             return .exclamation
         case "+":
             advance()
@@ -95,7 +99,58 @@ struct Lexer {
             return .star
         case "/":
             advance()
+            if peek() == "/" {
+                // Single-line comment: consume until newline
+                while let char = peek(), char != "\n" {
+                    advance()
+                }
+                
+                // Consumed comment. Now we might be at \n.
+                // We need to skip any whitespace (including the newline we just hit)
+                // before scanning the next token, because scanNextToken() doesn't handle whitespace.
+                while let char = peek(), char.isWhitespace {
+                    advance()
+                }
+                
+                // Now recurse
+                return scanNextToken()
+            }
             return .slash
+        case "&":
+            advance()
+            if peek() == "&" {
+                advance()
+                return .ampersandAmpersand
+            }
+            return nil // Single & not yet supported
+        case "|":
+            advance()
+            if peek() == "|" {
+                advance()
+                return .pipePipe
+            }
+            return nil // Single | not yet supported
+        case "=":
+            advance()
+            if peek() == "=" {
+                advance()
+                return .equalEqual
+            }
+            return nil // Assignment = not yet supported
+        case "<":
+            advance()
+            if peek() == "=" {
+                advance()
+                return .lessThanEqual
+            }
+            return .lessThan
+        case ">":
+            advance()
+            if peek() == "=" {
+                advance()
+                return .greaterThanEqual
+            }
+            return .greaterThan
         case "-":
             advance()
 

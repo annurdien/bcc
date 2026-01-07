@@ -61,6 +61,24 @@ struct CodeEmitter {
             return "  notl \(emit(operand: op, size: .l))\n"
         case .setz(let op):
             return "  setz \(emit(operand: op, size: .b))\n"
+        case .setnz(let op):
+            return "  setnz \(emit(operand: op, size: .b))\n"
+        case .setl(let op):
+            return "  setl \(emit(operand: op, size: .b))\n"
+        case .setle(let op):
+            return "  setle \(emit(operand: op, size: .b))\n"
+        case .setg(let op):
+            return "  setg \(emit(operand: op, size: .b))\n"
+        case .setge(let op):
+            return "  setge \(emit(operand: op, size: .b))\n"
+        case .jmp(let target):
+            return "  jmp \(target)\n"
+        case .je(let target):
+            return "  je \(target)\n"
+        case .jne(let target):
+            return "  jne \(target)\n"
+        case .label(let name):
+            return "\(name):\n"
         case .ret:
             return "  ret\n"
         }

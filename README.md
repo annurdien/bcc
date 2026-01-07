@@ -6,7 +6,7 @@
 
 ### Checkpoint (Jan 7, 2026)
 - [x] Stage 1 - Minimal C Program (function decl, return constant)
-- [ ] Stage 2 - Unary Operators
+- [x] Stage 2 - Unary Operators
     - [x] Negation (`-`)
     - [x] Bitwise Complement (`~`)
     - [x] Logical Negation (`!`)
@@ -15,4 +15,17 @@
     - [x] Subtraction (`-`)
     - [x] Multiplication (`*`)
     - [x] Division (`/`)
+- [x] Stage 4 - Relational & Logical Operators
+    - [x] Relational (`<, >, <=, >=`)
+    - [x] Equality (`==, !=`)
+    - [x] Logical AND (`&&`)
+    - [x] Logical OR (`||`)
+
+### Test System
+The test runner `test_runner.py` supports **Automatic Test Discovery**.
+- Add a `.c` file to `tests/`.
+- Include `// RETURN: <expected_code>` in the file.
+- `make test-all` will automatically compile, run, and verify the exit code.
+
+
 

@@ -53,6 +53,12 @@ enum TackyBinaryOperator: Equatable, CustomStringConvertible {
     case subtract
     case multiply
     case divide
+    case equal
+    case notEqual
+    case lessThan
+    case lessThanOrEqual
+    case greaterThan
+    case greaterThanOrEqual
     
     var description: String {
         switch self {
@@ -60,6 +66,12 @@ enum TackyBinaryOperator: Equatable, CustomStringConvertible {
         case .subtract: return "Subtract"
         case .multiply: return "Multiply"
         case .divide: return "Divide"
+        case .equal: return "Equal"
+        case .notEqual: return "NotEqual"
+        case .lessThan: return "LessThan"
+        case .lessThanOrEqual: return "LessThanOrEqual"
+        case .greaterThan: return "GreaterThan"
+        case .greaterThanOrEqual: return "GreaterThanOrEqual"
         }
     }
 }
@@ -68,8 +80,13 @@ enum TackyInstruction: Equatable, CustomStringConvertible {
     case `return`(TackyValue)
     case unary(op: TackyUnaryOperator, src: TackyValue, dest: TackyValue)
     case binary(op: TackyBinaryOperator, lhs: TackyValue, rhs: TackyValue, dest: TackyValue)
+    case copy(src: TackyValue, dest: TackyValue)
+    case jump(target: String)
+    case jumpIfZero(condition: TackyValue, target: String)
+    case jumpIfNotZero(condition: TackyValue, target: String)
+    case label(String)
 
-        var description: String {
+    var description: String {
         switch self {
         case .return(let val):
             return "Return(\(val.description))"
@@ -77,6 +94,16 @@ enum TackyInstruction: Equatable, CustomStringConvertible {
             return "\(dest.description) = \(op.description) \(src.description)"
         case .binary(let op, let lhs, let rhs, let dest):
             return "\(dest.description) = \(op.description) \(lhs.description), \(rhs.description)"
+        case .copy(let src, let dest):
+            return "\(dest.description) = Copy \(src.description)"
+        case .jump(let target):
+            return "Jump(\(target))"
+        case .jumpIfZero(let cond, let target):
+            return "JumpIfZero(\(cond.description), \(target))"
+        case .jumpIfNotZero(let cond, let target):
+            return "JumpIfNotZero(\(cond.description), \(target))"
+        case .label(let name):
+            return "Label(\(name))"
         }
     }
 }
