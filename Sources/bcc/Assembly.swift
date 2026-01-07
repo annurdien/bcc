@@ -59,6 +59,11 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
 
     // Operations (32-bit)
     case movl(AsmOperand, AsmOperand)
+    case addl(AsmOperand, AsmOperand)
+    case subl(AsmOperand, AsmOperand)
+    case imull(AsmOperand, AsmOperand)
+    case idivl(AsmOperand)
+    case cdq // Sign extend EAX to EDX:EAX for division
     case cmpl(AsmOperand, AsmOperand)
     case negl(AsmOperand)
     case notl(AsmOperand)
@@ -77,6 +82,16 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
             return "subq \(src.description), \(dest.description)"
         case .movl(let src, let dest):
             return "movl \(src.description), \(dest.description)"
+        case .addl(let src, let dest):
+            return "addl \(src.description), \(dest.description)"
+        case .subl(let src, let dest):
+            return "subl \(src.description), \(dest.description)"
+        case .imull(let src, let dest):
+            return "imull \(src.description), \(dest.description)"
+        case .idivl(let op):
+            return "idivl \(op.description)"
+        case .cdq:
+            return "cdq"
         case .negl(let op):
             return "negl \(op.description)"
         case .notl(let op):

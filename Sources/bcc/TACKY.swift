@@ -48,9 +48,26 @@ enum TackyUnaryOperator: Equatable, CustomStringConvertible {
     }
 }
 
+enum TackyBinaryOperator: Equatable, CustomStringConvertible {
+    case add
+    case subtract
+    case multiply
+    case divide
+    
+    var description: String {
+        switch self {
+        case .add: return "Add"
+        case .subtract: return "Subtract"
+        case .multiply: return "Multiply"
+        case .divide: return "Divide"
+        }
+    }
+}
+
 enum TackyInstruction: Equatable, CustomStringConvertible {
     case `return`(TackyValue)
     case unary(op: TackyUnaryOperator, src: TackyValue, dest: TackyValue)
+    case binary(op: TackyBinaryOperator, lhs: TackyValue, rhs: TackyValue, dest: TackyValue)
 
         var description: String {
         switch self {
@@ -58,6 +75,8 @@ enum TackyInstruction: Equatable, CustomStringConvertible {
             return "Return(\(val.description))"
         case .unary(let op, let src, let dest):
             return "\(dest.description) = \(op.description) \(src.description)"
+        case .binary(let op, let lhs, let rhs, let dest):
+            return "\(dest.description) = \(op.description) \(lhs.description), \(rhs.description)"
         }
     }
 }

@@ -14,6 +14,9 @@ enum Token: Equatable {
     case semicolon
     case tilde
     case exclamation
+    case plus
+    case star
+    case slash
 
     // One or two character tokens
     case minus

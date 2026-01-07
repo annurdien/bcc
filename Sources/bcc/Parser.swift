@@ -54,7 +54,51 @@ struct Parser {
         }
     }
 
-    private mutating func parseExpression() throws -> Expression {
+    private mutating func parseExpression(minPrecedence: Int = 0) throws -> Expression {
+        var lhs = try parseFactor()
+        
+        while true {
+            let token = peek()
+            let precedence = getPrecedence(token)
+            
+            if precedence < minPrecedence {
+                break
+            }
+            
+            guard let op = getBinaryOperator(token) else {
+                break
+            }
+            
+            advance() // Consume operator
+            let rhs = try parseExpression(minPrecedence: precedence + 1)
+            lhs = .binary(op, lhs, rhs)
+        }
+        
+        return lhs
+    }
+
+    private func getPrecedence(_ token: Token) -> Int {
+        switch token {
+        case .star, .slash:
+            return 2 // Higher precedence
+        case .plus, .minus:
+            return 1 // Lower precedence
+        default:
+            return -1
+        }
+    }
+    
+    private func getBinaryOperator(_ token: Token) -> BinaryOperator? {
+        switch token {
+        case .plus: return .add
+        case .minus: return .subtract
+        case .star: return .multiply
+        case .slash: return .divide
+        default: return nil
+        }
+    }
+
+    private mutating func parseFactor() throws -> Expression {
         let token = peek()
 
         switch token {
@@ -64,17 +108,17 @@ struct Parser {
 
         case .minus:
             advance()
-            let innerExp = try parseExpression()
+            let innerExp = try parseFactor()
             return .unary(.negate, innerExp)
         
         case .tilde:
             advance()
-            let innerExp = try parseExpression()
+            let innerExp = try parseFactor()
             return .unary(.complement, innerExp)
 
         case .exclamation:
             advance()
-            let innerExp = try parseExpression()
+            let innerExp = try parseFactor()
             return .unary(.logicalNot, innerExp)
         
         case .openParen:

@@ -9,5 +9,10 @@
 - [ ] Stage 2 - Unary Operators
     - [x] Negation (`-`)
     - [x] Bitwise Complement (`~`)
-    - [ ] Logical Negation (`!`)
+    - [x] Logical Negation (`!`)
+- [x] Stage 3 - Binary Operators
+    - [x] Addition (`+`)
+    - [x] Subtraction (`-`)
+    - [x] Multiplication (`*`)
+    - [x] Division (`/`)
 

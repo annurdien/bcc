@@ -53,10 +53,27 @@ enum UnaryOperator: Equatable, CustomStringConvertible {
     }
 }
 
-// exp = Constant(int) | Unary(unary_operator, exp)
+enum BinaryOperator: Equatable, CustomStringConvertible {
+    case add
+    case subtract
+    case multiply
+    case divide
+
+    var description: String {
+        switch self {
+        case .add: return "Add"
+        case .subtract: return "Subtract"
+        case .multiply: return "Multiply"
+        case .divide: return "Divide"
+        }
+    }
+}
+
+// exp = Constant(int) | Unary(unary_operator, exp) | Binary(binary_operator, exp, exp)
 indirect enum Expression: Equatable, CustomStringConvertible {
     case constant(Int)
     case unary(UnaryOperator, Expression)
+    case binary(BinaryOperator, Expression, Expression)
 
     var description: String {
         switch self {
@@ -66,6 +83,11 @@ indirect enum Expression: Equatable, CustomStringConvertible {
             let opLine = "op: \(op.description),"
             let expLine = "exp:\n\(indent(exp.description))"
             return "Unary(\n\(indent(opLine))\n\(indent(expLine))\n)"
+        case .binary(let op, let lhs, let rhs):
+            let opLine = "op: \(op.description),"
+            let lhsLine = "lhs:\n\(indent(lhs.description))"
+            let rhsLine = "rhs:\n\(indent(rhs.description))"
+            return "Binary(\n\(indent(opLine))\n\(indent(lhsLine))\n\(indent(rhsLine))\n)"
         }
     }
 }

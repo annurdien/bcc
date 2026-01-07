@@ -43,6 +43,16 @@ struct CodeEmitter {
             return "  subq \(emit(operand: src, size: .q)), \(emit(operand: dest, size: .q))\n"
         case .movl(let src, let dest):
             return "  movl \(emit(operand: src, size: .l)), \(emit(operand: dest, size: .l))\n"
+        case .addl(let src, let dest):
+            return "  addl \(emit(operand: src, size: .l)), \(emit(operand: dest, size: .l))\n"
+        case .subl(let src, let dest):
+            return "  subl \(emit(operand: src, size: .l)), \(emit(operand: dest, size: .l))\n"
+        case .imull(let src, let dest):
+            return "  imull \(emit(operand: src, size: .l)), \(emit(operand: dest, size: .l))\n"
+        case .idivl(let op):
+            return "  idivl \(emit(operand: op, size: .l))\n"
+        case .cdq:
+            return "  cdq\n"
         case .cmpl(let src, let dest):
             return "  cmpl \(emit(operand: src, size: .l)), \(emit(operand: dest, size: .l))\n"
         case .negl(let op):

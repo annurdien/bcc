@@ -76,6 +76,12 @@ def main():
         ("tests/valid_bang_0.c", 1),
         ("tests/valid_bang_5.c", 0),
         ("tests/valid_bang_nested.c", 1),
+        ("tests/valid_add.c", 3),
+        ("tests/valid_sub.c", 255), # -1 becomes 255 (unsigned byte return code)
+        ("tests/valid_mul.c", 6),
+        ("tests/valid_div.c", 5),
+        ("tests/valid_precedence_1.c", 14),
+        ("tests/valid_precedence_2.c", 20),
     ]
     
     passed = 0

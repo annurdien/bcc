@@ -87,6 +87,15 @@ struct Lexer {
         case "!":
             advance()
             return .exclamation
+        case "+":
+            advance()
+            return .plus
+        case "*":
+            advance()
+            return .star
+        case "/":
+            advance()
+            return .slash
         case "-":
             advance()
 

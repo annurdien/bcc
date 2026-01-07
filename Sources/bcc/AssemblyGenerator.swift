@@ -55,6 +55,41 @@ struct AssemblyGenerator {
                     // 3. Set lower byte if equal (zero flag set)
                     instructions.append(.setz(destOperand))
                 }
+
+            case .binary(let op, let lhs, let rhs, let dest):
+                let destOperand = convert(dest)
+                let lhsOperand = convert(lhs)
+                let rhsOperand = convert(rhs)
+                
+                // For Add/Sub/Mul:
+                // 1. mov lhs -> dest  (dest = lhs)
+                // 2. op rhs, dest     (dest = dest op rhs) -> (dest = lhs op rhs)
+
+                // For Div:
+                // Special handling because idivl uses EAX:EDX
+                
+                switch op {
+                case .add:
+                    instructions.append(.movl(lhsOperand, destOperand))
+                    instructions.append(.addl(rhsOperand, destOperand))
+                case .subtract:
+                    instructions.append(.movl(lhsOperand, destOperand))
+                    instructions.append(.subl(rhsOperand, destOperand))
+                case .multiply:
+                    instructions.append(.movl(lhsOperand, destOperand))
+                    instructions.append(.imull(rhsOperand, destOperand))
+                case .divide:
+                    // idivl S
+                    // 1. mov lhs -> EAX
+                    // 2. cltd (sign extend EAX -> EDX:EAX) - we use cdq for 32-bit
+                    // 3. idivl rhs
+                    // 4. mov EAX -> dest
+                    
+                    instructions.append(.movl(lhsOperand, .register(.eax)))
+                    instructions.append(.cdq)
+                    instructions.append(.idivl(rhsOperand))
+                    instructions.append(.movl(.register(.eax), destOperand))
+                }
             }
         }
         
@@ -100,6 +135,16 @@ struct AssemblyGenerator {
                 newInstructions.append(.negl(mapOperand(op)))
             case .notl(let op):
                 newInstructions.append(.notl(mapOperand(op)))
+            case .addl(let src, let dest):
+                newInstructions.append(.addl(mapOperand(src), mapOperand(dest)))
+            case .subl(let src, let dest):
+                newInstructions.append(.subl(mapOperand(src), mapOperand(dest)))
+            case .imull(let src, let dest):
+                newInstructions.append(.imull(mapOperand(src), mapOperand(dest)))
+            case .idivl(let op):
+                newInstructions.append(.idivl(mapOperand(op)))
+            case .cdq:
+                newInstructions.append(.cdq)
             case .cmpl(let src, let dest):
                 newInstructions.append(.cmpl(mapOperand(src), mapOperand(dest)))
             case .setz(let op):
@@ -140,7 +185,53 @@ struct AssemblyGenerator {
                 } else {
                     finalInstructions.append(inst)
                 }
+
+            // addl mem, mem is illegal
+            case .addl(let src, let dest):
+                if case .stackOffset = src, case .stackOffset = dest {
+                    finalInstructions.append(.movl(src, .register(.r10d)))
+                    finalInstructions.append(.addl(.register(.r10d), dest))
+                } else {
+                    finalInstructions.append(inst)
+                }
+
+            // subl mem, mem is illegal
+            case .subl(let src, let dest):
+                 if case .stackOffset = src, case .stackOffset = dest {
+                    finalInstructions.append(.movl(src, .register(.r10d)))
+                    finalInstructions.append(.subl(.register(.r10d), dest))
+                } else {
+                    finalInstructions.append(inst)
+                }
+
+            // imull mem, mem is illegal
+            case .imull(let src, let dest):
+                 if case .stackOffset = src, case .stackOffset = dest {
+                    finalInstructions.append(.movl(src, .register(.r10d)))
+                    finalInstructions.append(.imull(.register(.r10d), dest))
+                } else if case .stackOffset = dest {
+                    // imull src, memory -> illegal. Must be imull src, reg.
+                    // Fix:
+                    // movl dest, %r11d
+                    // imull src, %r11d
+                    // movl %r11d, dest
+                    
+                    finalInstructions.append(.movl(dest, .register(.r10d))) // Use r10d as scratch
+                    finalInstructions.append(.imull(src, .register(.r10d)))
+                    finalInstructions.append(.movl(.register(.r10d), dest))
+                } else {
+                    finalInstructions.append(inst)
+                }
             
+            // idivl imm is illegal
+            case .idivl(let op):
+                if case .immediate = op {
+                    finalInstructions.append(.movl(op, .register(.r10d)))
+                    finalInstructions.append(.idivl(.register(.r10d)))
+                } else {
+                    finalInstructions.append(inst)
+                }
+
             // Other instructions are fine for now
             default:
                 finalInstructions.append(inst)

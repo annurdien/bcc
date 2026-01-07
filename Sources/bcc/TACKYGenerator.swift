@@ -45,6 +45,21 @@ struct TACKYGenerator {
 
             instructions.append(.unary(op: tackyOp, src: sourceValue, dest: destValue))
             return destValue
+
+        case .binary(let op, let lhsExp, let rhsExp):
+            let lhs = generate(expression: lhsExp, into: &instructions)
+            let rhs = generate(expression: rhsExp, into: &instructions)
+            let dest = makeTemporary()
+
+            let tackyOp: TackyBinaryOperator = switch op {
+                case .add: .add
+                case .subtract: .subtract
+                case .multiply: .multiply
+                case .divide: .divide
+            }
+
+            instructions.append(.binary(op: tackyOp, lhs: lhs, rhs: rhs, dest: dest))
+            return dest
         }
     }
 }
