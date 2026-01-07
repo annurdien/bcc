@@ -16,12 +16,12 @@ $(COMPILER):
 # Build the final binary executable
 $(TARGET): $(TARGET).o
 	@echo "Linking..."
-	@clang -target x86_64 $(TARGET).o -o $(TARGET)
+	@clang -arch x86_64 $(TARGET).o -o $(TARGET)
 
 # Build the object file from the assembly
 $(TARGET).o: $(TARGET).s
 	@echo "Assembling..."
-	@as $(TARGET).s -o $(TARGET).o
+	@as -arch x86_64 $(TARGET).s -o $(TARGET).o
 
 # Build the assembly file from the source
 $(TARGET).s: $(COMPILER) $(SRC)
@@ -35,6 +35,10 @@ test: $(TARGET)
 	@echo "Running test for $(SRC)..."
 	@./$(TARGET) || true
 	@echo "Test finished with exit code: $?"
+
+# Run all tests using the python runner
+test-all: $(COMPILER)
+	@python3 test_runner.py
 
 # Test just the lexer by printing tokens
 tokens: $(COMPILER)
