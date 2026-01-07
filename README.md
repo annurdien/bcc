@@ -22,6 +22,7 @@
     - [x] Logical OR (`||`)
 
 ### Test System
+![CI](https://github.com/annurdien/bcc/actions/workflows/ci.yml/badge.svg)
 The test runner `test_runner.py` supports **Automatic Test Discovery**.
 - Add a `.c` file to `tests/`.
 - Include `// RETURN: <expected_code>` in the file.
