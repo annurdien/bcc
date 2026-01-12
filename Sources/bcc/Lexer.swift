@@ -91,6 +91,12 @@ struct Lexer {
                 return .exclamationEqual
             }
             return .exclamation
+        case ":":
+            advance()
+            return .colon
+        case "?":
+            advance()
+            return .questionMark
         case "+":
             advance()
             return .plus
@@ -136,7 +142,7 @@ struct Lexer {
                 advance()
                 return .equalEqual
             }
-            return nil // Assignment = not yet supported
+            return .equal
         case "<":
             advance()
             if peek() == "=" {
@@ -187,6 +193,8 @@ struct Lexer {
         case "int": return .keywordInt
         case "return": return .keywordReturn
         case "void": return .keywordVoid
+        case "if": return .keywordIf
+        case "else": return .keywordElse
         default: return .identifier(identifierString)
         }
     }

@@ -59,9 +59,36 @@ struct Parser {
         
         while true {
             let token = peek()
+            
+            // Handle Assignment specially (Right Associative, Precedence 1)
+            if token == .equal {
+                if 1 < minPrecedence { break }
+                advance()
+                let rhs = try parseExpression(minPrecedence: 1) 
+                
+                if case .variable(let name) = lhs {
+                    lhs = .assignment(name: name, expression: rhs)
+                    continue
+                } else {
+                    throw ParserError.expectedExpression(found: token)
+                }
+            }
+            
+            // Handle Ternary Operator (Right Associative, Precedence 3)
+            // Lower than || (5), higher than = (1)
+            if token == .questionMark {
+                if 3 < minPrecedence { break }
+                advance()
+                let thenExpr = try parseExpression() 
+                try consume(.colon)
+                let elseExpr = try parseExpression(minPrecedence: 3)
+                lhs = .conditional(condition: lhs, thenExpr: thenExpr, elseExpr: elseExpr)
+                continue
+            }
+
             let precedence = getPrecedence(token)
             
-            if precedence < minPrecedence {
+            if precedence < minPrecedence || precedence == -1 {
                 break
             }
             
@@ -145,18 +172,74 @@ struct Parser {
         
         case .minusMinus:
             throw ParserError.unexpectedToken(token)
-        
+
+        case .identifier(let name):
+            advance()
+            return .variable(name)
+
         default:
             throw ParserError.expectedExpression(found: token)
         }
     }
 
     private mutating func parseStatement() throws -> Statement {
-        try consume(.keywordReturn)
-        let expression = try parseExpression()
+        if peek() == .keywordReturn {
+            advance()
+            let expression = try parseExpression()
+            try consume(.semicolon)
+            return .return(expression)
+        } else if peek() == .keywordIf {
+            advance()
+            try consume(.openParen)
+            let condition = try parseExpression()
+            try consume(.closeParen)
+            let thenStmt = try parseStatement()
+            var elseStmt: Statement? = nil
+            if peek() == .keywordElse {
+                advance()
+                elseStmt = try parseStatement()
+            }
+            return .if(condition: condition, then: thenStmt, else: elseStmt)
+        } else if peek() == .openBrace {
+            advance()
+            var items: [BlockItem] = []
+            while peek() != .closeBrace && peek() != .eof {
+                items.append(try parseBlockItem())
+            }
+            try consume(.closeBrace)
+            return .compound(items)
+        } else {
+            let expression = try parseExpression()
+            try consume(.semicolon)
+            return .expression(expression)
+        }
+    }
+    
+    // declaration = "int" identifier [ "=" expression ] ";"
+    private mutating func parseDeclaration() throws -> Declaration {
+        try consume(.keywordInt)
+        
+        guard case .identifier(let name) = peek() else {
+            throw ParserError.expectedToken("identifier", found: peek())
+        }
+        advance()
+        
+        var initializer: Expression? = nil
+        if peek() == .equal {
+            advance()
+            initializer = try parseExpression()
+        }
+        
         try consume(.semicolon)
+        return Declaration(name: name, initializer: initializer)
+    }
 
-        return .return(expression)
+    private mutating func parseBlockItem() throws -> BlockItem {
+        if peek() == .keywordInt {
+            return .declaration(try parseDeclaration())
+        } else {
+            return .statement(try parseStatement())
+        }
     }
 
     private mutating func parseFunction() throws -> FunctionDeclaration {
@@ -169,11 +252,17 @@ struct Parser {
         advance()
 
         try consume(.openParen)
-        try consume(.keywordVoid)
+//        try consume(.keywordVoid) // Valid C allows 'int main()' or 'int main(void)'
+        if peek() == .keywordVoid {
+            advance()
+        }
         try consume(.closeParen)
         try consume(.openBrace)
 
-        let body = try parseStatement()
+        var body: [BlockItem] = []
+        while peek() != .closeBrace && peek() != .eof {
+            body.append(try parseBlockItem())
+        }
 
         try consume(.closeBrace)
 

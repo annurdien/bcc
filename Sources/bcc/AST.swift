@@ -13,27 +13,69 @@ struct Program: Equatable, CustomStringConvertible {
     }
 }
 
-// function_definition = Function(identifier name, statement body)
+// function_definition = Function(identifier name, block_item* body)
 struct FunctionDeclaration: Equatable, CustomStringConvertible {
     let name: String
-    let body: Statement
+    let body: [BlockItem]
 
     var description: String {
         let nameLine = "name=\"\(name)\","
-        let bodyLine = "body=\(body.description)"
+        let bodyDesc = body.map { $0.description }.joined(separator: "\n")
+        let bodyLine = "body=[\n\(indent(bodyDesc))\n]"
         
         return "Function(\n\(indent(nameLine))\n\(indent(bodyLine))\n)"
     }
 }
 
-// statement = Return(exp)
-enum Statement: Equatable, CustomStringConvertible {
+// block_item = Statement | Declaration
+enum BlockItem: Equatable, CustomStringConvertible {
+    case statement(Statement)
+    case declaration(Declaration)
+
+    var description: String {
+        switch self {
+        case .statement(let s): return s.description
+        case .declaration(let d): return d.description
+        }
+    }
+}
+
+// declaration = Declare(identifier name, exp? initializer)
+struct Declaration: Equatable, CustomStringConvertible {
+    let name: String
+    let initializer: Expression?
+
+    var description: String {
+        if let initExp = initializer {
+            return "Declare(\(name), init: \(initExp.description))"
+        }
+        return "Declare(\(name))"
+    }
+}
+
+// statement = Return(exp) | Expression(exp) | If(cond, then, else?) | Compound(block_item*)
+indirect enum Statement: Equatable, CustomStringConvertible {
     case `return`(Expression)
+    case expression(Expression)
+    case `if`(condition: Expression, then: Statement, `else`: Statement?)
+    case compound([BlockItem])
 
     var description: String {
         switch self {
         case .return(let exp):
             return "Return(\n\(indent(exp.description))\n)"
+        case .expression(let exp):
+            return "ExprStmt(\n\(indent(exp.description))\n)"
+        case .if(let cond, let thenStmt, let elseStmt):
+            var desc = "If(\n\(indent("cond: " + cond.description))\n\(indent("then: " + thenStmt.description))\n"
+            if let elseStmt = elseStmt {
+                desc += indent("else: " + elseStmt.description) + "\n"
+            }
+            desc += ")"
+            return desc
+        case .compound(let items):
+            let desc = items.map { $0.description }.joined(separator: "\n")
+            return "Block {\n\(indent(desc))\n}"
         }
     }
 }
@@ -85,16 +127,21 @@ enum BinaryOperator: Equatable, CustomStringConvertible {
     }
 }
 
-// exp = Constant(int) | Unary(unary_operator, exp) | Binary(binary_operator, exp, exp)
+// exp = Constant(int) | Unary(unary_operator, exp) | Binary(binary_operator, exp, exp) | Var(identifier) | Assignment(identifier, exp)
 indirect enum Expression: Equatable, CustomStringConvertible {
     case constant(Int)
     case unary(UnaryOperator, Expression)
     case binary(BinaryOperator, Expression, Expression)
+    case variable(String)
+    case assignment(name: String, expression: Expression)
+    case conditional(condition: Expression, thenExpr: Expression, elseExpr: Expression)
 
     var description: String {
         switch self {
         case .constant(let value):
             return "Constant(\(value))"
+        case .conditional(let cond, let thenExpr, let elseExpr):
+            return "Conditional(\n\(indent(cond.description)) ?\n\(indent(thenExpr.description)) :\n\(indent(elseExpr.description))\n)"
         case .unary(let op, let exp):
             let opLine = "op: \(op.description),"
             let expLine = "exp:\n\(indent(exp.description))"
@@ -104,6 +151,10 @@ indirect enum Expression: Equatable, CustomStringConvertible {
             let lhsLine = "lhs:\n\(indent(lhs.description))"
             let rhsLine = "rhs:\n\(indent(rhs.description))"
             return "Binary(\n\(indent(opLine))\n\(indent(lhsLine))\n\(indent(rhsLine))\n)"
+        case .variable(let name):
+            return "Var(\(name))"
+        case .assignment(let name, let exp):
+             return "Assign(name: \(name), val:\n\(indent(exp.description)))"
         }
     }
 }

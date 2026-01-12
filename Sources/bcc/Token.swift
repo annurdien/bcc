@@ -5,6 +5,8 @@ enum Token: Equatable {
     case keywordInt
     case keywordReturn
     case keywordVoid
+    case keywordIf
+    case keywordElse
 
     // Single character tokens
     case openParen
@@ -17,6 +19,8 @@ enum Token: Equatable {
     case plus
     case star
     case slash
+    case questionMark
+    case colon
     case ampersandAmpersand
     case pipePipe
     case equalEqual
@@ -25,6 +29,7 @@ enum Token: Equatable {
     case lessThanEqual
     case greaterThan
     case greaterThanEqual
+    case equal // = Assignment
 
     // One or two character tokens
     case minus

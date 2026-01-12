@@ -316,18 +316,21 @@ struct AssemblyGenerator {
         let epilogue: [AsmInstruction] = [
             .movq(.register(.rbp), .register(.rsp)),
             .popq(.register(.rbp)),
-            // .ret is now part of the epilogue, not the main instruction list
+            .ret
         ]
         
-        // Find the .ret instruction and insert the epilogue before it
-        if let retIndex = function.instructions.firstIndex(of: .ret) {
-            function.instructions.remove(at: retIndex) // Remove the placeholder .ret
-            function.instructions.insert(contentsOf: prologue, at: 0)
-            function.instructions.append(contentsOf: epilogue)
-            function.instructions.append(.ret) // Add the *real* .ret at the very end
-        } else {
-            // This should not happen if TACKY generation is correct
-            print("Error: No .ret instruction found. Epilogue not added.")
+        // 1. Insert prologue at the very beginning
+        function.instructions.insert(contentsOf: prologue, at: 0)
+        
+        // 2. Replace all .ret instructions with the epilogue sequence
+        var newInstructions: [AsmInstruction] = []
+        for inst in function.instructions {
+            if inst == .ret {
+                newInstructions.append(contentsOf: epilogue)
+            } else {
+                newInstructions.append(inst)
+            }
         }
+        function.instructions = newInstructions
     }
 }
