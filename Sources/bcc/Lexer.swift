@@ -47,6 +47,18 @@ struct Lexer {
                 advance()
                 continue
             }
+            
+            // Handle single-line comments //
+            if source[currentIndex] == "/" {
+                let nextIndex = source.index(after: currentIndex)
+                if nextIndex < source.endIndex && source[nextIndex] == "/" {
+                    // Consume until newline
+                    while !isAtEnd && peek() != "\n" {
+                         advance()
+                    }
+                    continue
+                }
+            }
 
             if let token = scanNextToken() {
                 tokens.append(token)
@@ -93,8 +105,9 @@ struct Lexer {
             return .exclamation
         case ":":
             advance()
-            return .colon
-        case "?":
+            return .colon        case ",":
+             advance()
+             return .comma        case "?":
             advance()
             return .questionMark
         case "+":

@@ -1,72 +1,82 @@
 import Foundation
 
-// --- Updated File: AssemblyGenerator.swift ---
-// This class converts TACKY IR to Assembly AST
-
 struct AssemblyGenerator {
 
     /// Main generation function
     func generate(program: TackyProgram) -> AsmProgram {
-        var asmFunction = convertTackyToAsm(function: program.function)
-        let (finalInstructions, stackSize) = replacePseudoregisters(in: asmFunction.instructions)
-        asmFunction.instructions = finalInstructions
+        // Iterate over all functions in the program
+        let asmFunctions = program.functions.map { generateFunction($0) }
+        return AsmProgram(functions: asmFunctions)
+    }
+
+    private func generateFunction(_ tackyFunc: TackyFunction) -> AsmFunction {
+        // 1. Convert TACKY implementation to Assembly (with pseudoregisters)
+        var asmFunction = convertTackyToAsm(function: tackyFunc)
+        
+        // 2. Replace Pseudoregisters with Stack Offsets
+        let (resolvedInstructions, stackSize) = replacePseudoregisters(in: asmFunction.instructions)
+        asmFunction.instructions = resolvedInstructions
         asmFunction.stackSize = stackSize
         
-        // Add prologue and epilogue
+        // 3. Add Prologue and Epilogue
         addPrologueAndEpilogue(&asmFunction)
         
-        // Fix-up pass
+        // 4. Fix Up Illegal Instructions
         asmFunction.instructions = fixUpInstructions(asmFunction.instructions)
         
-        return AsmProgram(function: asmFunction)
+        return asmFunction
     }
     
+    // ABI Argument Registers (First 6) - Using 32-bit accessors
+    // Note: We use 32-bit registers (edi, esi...) because TACKY values are 32-bit ints.
+    // Writing to these 32-bit registers zeros the upper 32-bits of the full 64-bit registers.
+    private let argumentRegisters: [AsmRegister] = [.edi, .esi, .edx, .ecx, .r8d, .r9d]
+
     // --- Pass 1: Convert TACKY to Assembly (using Pseudoregisters) ---
-    // --- THIS FUNCTION IS NOW UPDATED TO MATCH TABLE 2-3 ---
     private func convertTackyToAsm(function: TackyFunction) -> AsmFunction {
         var instructions: [AsmInstruction] = []
         
+        // 1. Parameter Handling (Prologue part that moves args to locals)
+        // Move arguments from ABI locations (Regs or Caller Stack) to local storage (Pseudoregisters)
+        for (index, paramName) in function.parameters.enumerated() {
+            let dest = AsmOperand.pseudoregister(paramName)
+            if index < argumentRegisters.count {
+                // Register argument: movl %edi, param
+                let reg = argumentRegisters[index]
+                instructions.append(.movl(.register(reg), dest))
+            } else {
+                // Stack argument (Caller's stack): movl 16(%rbp), param
+                // Arguments start at RBP + 16. The 7th argument (index 6) is at 16.
+                let stackIndex = index - 6
+                let offset = 16 + (stackIndex * 8)
+                instructions.append(.movl(.stackOffset(offset), dest))
+            }
+        }
+
         for tackyInst in function.body {
             switch tackyInst {
             case .return(let value):
-                // Per Table 2-3:
-                // 1. Mov(val, Reg(AX))
                 instructions.append(.movl(convert(value), .register(.eax)))
-                // 2. Ret
-                instructions.append(.ret) // <-- ADDED
+                instructions.append(.ret)
                 
             case .unary(let op, let src, let dest):
                 let destOperand = convert(dest)
-                // Per Table 2-3:
-                // 1. Mov(src, dst)
                 instructions.append(.movl(convert(src), destOperand))
-                
-                // 2. Unary(unary_operator, dst)
                 switch op {
                 case .negate:
                     instructions.append(.negl(destOperand))
                 case .complement:
                     instructions.append(.notl(destOperand))
                 case .logicalNot:
-                    // 1. Compare with 0
                     instructions.append(.cmpl(.immediate(0), destOperand))
-                    // 2. Zero out the destination
                     instructions.append(.movl(.immediate(0), destOperand))
-                    // 3. Set lower byte if equal (zero flag set)
                     instructions.append(.setz(destOperand))
                 }
-
+                
             case .binary(let op, let lhs, let rhs, let dest):
                 let destOperand = convert(dest)
                 let lhsOperand = convert(lhs)
                 let rhsOperand = convert(rhs)
-                
-                // For Add/Sub/Mul:
-                // 1. mov lhs -> dest  (dest = lhs)
-                // 2. op rhs, dest     (dest = dest op rhs) -> (dest = lhs op rhs)
-
-                // For Div:
-                // Special handling because idivl uses EAX:EDX
                 
                 switch op {
                 case .add:
@@ -78,71 +88,100 @@ struct AssemblyGenerator {
                 case .multiply:
                     instructions.append(.movl(lhsOperand, destOperand))
                     instructions.append(.imull(rhsOperand, destOperand))
-                case .divide:
-                    // idivl S
-                    // 1. mov lhs -> EAX
-                    // 2. cltd (sign extend EAX -> EDX:EAX) - we use cdq for 32-bit
-                    // 3. idivl rhs
-                    // 4. mov EAX -> dest
-                    
+                case .divide: 
+                    // idivl divides EDX:EAX by operand
                     instructions.append(.movl(lhsOperand, .register(.eax)))
-                    instructions.append(.cdq)
+                    instructions.append(.cdq) // Sign extend EAX -> EDX
                     instructions.append(.idivl(rhsOperand))
                     instructions.append(.movl(.register(.eax), destOperand))
-                
+                    
+                // Comparison Logic
                 case .equal:
                     instructions.append(.cmpl(rhsOperand, lhsOperand))
                     instructions.append(.movl(.immediate(0), destOperand))
                     instructions.append(.setz(destOperand))
-
                 case .notEqual:
                     instructions.append(.cmpl(rhsOperand, lhsOperand))
                     instructions.append(.movl(.immediate(0), destOperand))
                     instructions.append(.setnz(destOperand))
-
                 case .lessThan:
                     instructions.append(.cmpl(rhsOperand, lhsOperand))
                     instructions.append(.movl(.immediate(0), destOperand))
                     instructions.append(.setl(destOperand))
-
                 case .lessThanOrEqual:
                     instructions.append(.cmpl(rhsOperand, lhsOperand))
                     instructions.append(.movl(.immediate(0), destOperand))
                     instructions.append(.setle(destOperand))
-
                 case .greaterThan:
                     instructions.append(.cmpl(rhsOperand, lhsOperand))
                     instructions.append(.movl(.immediate(0), destOperand))
                     instructions.append(.setg(destOperand))
-
                 case .greaterThanOrEqual:
                     instructions.append(.cmpl(rhsOperand, lhsOperand))
                     instructions.append(.movl(.immediate(0), destOperand))
                     instructions.append(.setge(destOperand))
                 }
-
+                
             case .copy(let src, let dest):
                 instructions.append(.movl(convert(src), convert(dest)))
-
+                
             case .jump(let target):
                 instructions.append(.jmp(target))
-
-            case .jumpIfZero(let cond, let target):
-                instructions.append(.cmpl(.immediate(0), convert(cond)))
+                
+            case .jumpIfZero(let condition, let target):
+                instructions.append(.cmpl(.immediate(0), convert(condition)))
                 instructions.append(.je(target))
-
-            case .jumpIfNotZero(let cond, let target):
-                instructions.append(.cmpl(.immediate(0), convert(cond)))
+                
+            case .jumpIfNotZero(let condition, let target):
+                instructions.append(.cmpl(.immediate(0), convert(condition)))
                 instructions.append(.jne(target))
-
+                
             case .label(let name):
                 instructions.append(.label(name))
+                
+            case .call(let name, let args, let dest):
+                 // System V AMD64 ABI Calling Convention
+                 
+                 let regArgs = Array(args.prefix(6))
+                 let stackArgs = Array(args.dropFirst(6))
+                 
+                 // 1. Stack Alignment
+                 let stackPadding = (stackArgs.count % 2 != 0) ? 8 : 0
+                 if stackPadding > 0 {
+                     instructions.append(.subq(.immediate(stackPadding), .register(.rsp)))
+                 }
+                 
+                 // 2. Push Stack Args (Reverse Order)
+                 for arg in stackArgs.reversed() {
+                     let op = convert(arg)
+                     // Move to EAX first to handle memory operands or extension
+                     instructions.append(.movl(op, .register(.eax)))
+                     // Push RAX (8 bytes) to stack
+                     instructions.append(.pushq(.register(.rax)))
+                 }
+                 
+                 // 3. Set Register Args
+                 for (i, arg) in regArgs.enumerated() {
+                     let reg = argumentRegisters[i]
+                     instructions.append(.movl(convert(arg), .register(reg)))
+                 }
+                 
+                 // 4. Call
+                 instructions.append(.call(name))
+                 
+                 // 5. Cleanup Stack
+                 let bytesPopped = (stackArgs.count * 8) + stackPadding
+                 if bytesPopped > 0 {
+                     instructions.append(.addq(.immediate(bytesPopped), .register(.rsp)))
+                 }
+                 
+                 // 6. Store Result
+                 instructions.append(.movl(.register(.eax), convert(dest)))
             }
         }
         
         return AsmFunction(name: function.name, instructions: instructions, stackSize: 0)
     }
-    // --- END UPDATED SECTION ---
 
     private func convert(_ value: TackyValue) -> AsmOperand {
         switch value {
@@ -175,6 +214,7 @@ struct AssemblyGenerator {
         }
 
         for inst in instructions {
+            // Map operands in all instructions that use them
             switch inst {
             case .movl(let src, let dest):
                 newInstructions.append(.movl(mapOperand(src), mapOperand(dest)))
@@ -206,8 +246,19 @@ struct AssemblyGenerator {
                 newInstructions.append(.setg(mapOperand(op)))
             case .setge(let op):
                 newInstructions.append(.setge(mapOperand(op)))
+                
+            // Instructions that don't need operand mapping or mapping inside operand wrapper
+            case .pushq(let op):
+                 newInstructions.append(.pushq(mapOperand(op)))
+            case .popq(let op):
+                 newInstructions.append(.popq(mapOperand(op)))
+            case .movq(let src, let dest):
+                 newInstructions.append(.movq(mapOperand(src), mapOperand(dest)))
+            case .subq(let src, let dest):
+                 newInstructions.append(.subq(mapOperand(src), mapOperand(dest)))
+                 
             default:
-                newInstructions.append(inst) // .ret, etc.
+                newInstructions.append(inst)
             }
         }
         
@@ -221,27 +272,21 @@ struct AssemblyGenerator {
         
         for inst in instructions {
             switch inst {
-            // movl mem, mem is illegal. Fix it.
+            // movl mem, mem is illegal.
             case .movl(let src, let dest):
                 if case .stackOffset = src, case .stackOffset = dest {
-                    // movl %src, %r10d
                     finalInstructions.append(.movl(src, .register(.r10d)))
-                    // movl %r10d, %dest
                     finalInstructions.append(.movl(.register(.r10d), dest))
                 } else {
                     finalInstructions.append(inst)
                 }
 
-            // cmpl mem, mem is illegal. Fix it.
-            // cmpl *, immediate is illegal (destination cannot be immediate)
+            // cmpl mem, mem is illegal. Dest cannot be immediate.
             case .cmpl(let src, let dest):
                 if case .stackOffset = src, case .stackOffset = dest {
-                    // movl %src, %r10d
                     finalInstructions.append(.movl(src, .register(.r10d)))
-                    // cmpl %r10d, %dest
                     finalInstructions.append(.cmpl(.register(.r10d), dest))
                 } else if case .immediate = dest {
-                    // cmpl src, $imm -> illegal. Move dest to reg.
                     finalInstructions.append(.movl(dest, .register(.r10d)))
                     finalInstructions.append(.cmpl(src, .register(.r10d)))
                 } else {
@@ -271,14 +316,9 @@ struct AssemblyGenerator {
                  if case .stackOffset = src, case .stackOffset = dest {
                     finalInstructions.append(.movl(src, .register(.r10d)))
                     finalInstructions.append(.imull(.register(.r10d), dest))
-                } else if case .stackOffset = dest {
-                    // imull src, memory -> illegal. Must be imull src, reg.
-                    // Fix:
-                    // movl dest, %r11d
-                    // imull src, %r11d
-                    // movl %r11d, dest
-                    
-                    finalInstructions.append(.movl(dest, .register(.r10d))) // Use r10d as scratch
+                } else if case .stackOffset = dest { 
+                    // imull's 2-operand form: dest must be register.
+                    finalInstructions.append(.movl(dest, .register(.r10d)))
                     finalInstructions.append(.imull(src, .register(.r10d)))
                     finalInstructions.append(.movl(.register(.r10d), dest))
                 } else {
@@ -294,7 +334,6 @@ struct AssemblyGenerator {
                     finalInstructions.append(inst)
                 }
 
-            // Other instructions are fine for now
             default:
                 finalInstructions.append(inst)
             }
@@ -323,6 +362,7 @@ struct AssemblyGenerator {
         function.instructions.insert(contentsOf: prologue, at: 0)
         
         // 2. Replace all .ret instructions with the epilogue sequence
+        // (except if the user wrote unreachable code, but standard returns are replaced)
         var newInstructions: [AsmInstruction] = []
         for inst in function.instructions {
             if inst == .ret {

@@ -3,9 +3,9 @@ import Foundation
 struct CodeEmitter {
     
     func emit(program: AsmProgram) -> String {
-        return emit(function: program.function)
+        return program.functions.map { emit(function: $0) }.joined(separator: "\n")
     }
-    
+
     private func emit(function: AsmFunction) -> String {
         var output = ""
         
@@ -39,6 +39,8 @@ struct CodeEmitter {
             return "  popq \(emit(operand: op, size: .q))\n"
         case .movq(let src, let dest):
             return "  movq \(emit(operand: src, size: .q)), \(emit(operand: dest, size: .q))\n"
+        case .addq(let src, let dest):
+            return "  addq \(emit(operand: src, size: .q)), \(emit(operand: dest, size: .q))\n"
         case .subq(let src, let dest):
             return "  subq \(emit(operand: src, size: .q)), \(emit(operand: dest, size: .q))\n"
         case .movl(let src, let dest):
@@ -77,6 +79,12 @@ struct CodeEmitter {
             return "  je \(target)\n"
         case .jne(let target):
             return "  jne \(target)\n"
+        case .call(let funcName):
+            #if os(macOS)
+            return "  call _\(funcName)\n"
+            #else
+            return "  call \(funcName)\n"
+            #endif
         case .label(let name):
             return "\(name):\n"
         case .ret:
@@ -114,6 +122,42 @@ struct CodeEmitter {
                 case .q: return "%r10"
                 case .l: return "%r10d"
                 case .b: return "%r10b"
+                }
+            case .rdi, .edi:
+                switch size {
+                case .q: return "%rdi"
+                case .l: return "%edi"
+                case .b: return "%dil"
+                }
+            case .rsi, .esi:
+                switch size {
+                case .q: return "%rsi"
+                case .l: return "%esi"
+                case .b: return "%sil"
+                }
+            case .rdx, .edx:
+                switch size {
+                case .q: return "%rdx"
+                case .l: return "%edx"
+                case .b: return "%dl"
+                }
+            case .rcx, .ecx:
+                switch size {
+                case .q: return "%rcx"
+                case .l: return "%ecx"
+                case .b: return "%cl"
+                }
+            case .r8, .r8d:
+                switch size {
+                case .q: return "%r8"
+                case .l: return "%r8d"
+                case .b: return "%r8b"
+                }
+            case .r9, .r9d:
+                switch size {
+                case .q: return "%r9"
+                case .l: return "%r9d"
+                case .b: return "%r9b"
                 }
             case .r10d:
                  switch size {

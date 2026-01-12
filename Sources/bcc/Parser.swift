@@ -175,6 +175,19 @@ struct Parser {
 
         case .identifier(let name):
             advance()
+            if peek() == .openParen {
+                try consume(.openParen)
+                var args: [Expression] = []
+                if peek() != .closeParen {
+                    args.append(try parseExpression())
+                    while peek() == .comma {
+                         advance()
+                         args.append(try parseExpression())
+                    }
+                }
+                try consume(.closeParen)
+                return .functionCall(name: name, arguments: args)
+            }
             return .variable(name)
 
         default:
@@ -315,30 +328,56 @@ struct Parser {
         advance()
 
         try consume(.openParen)
-//        try consume(.keywordVoid) // Valid C allows 'int main()' or 'int main(void)'
-        if peek() == .keywordVoid {
-            advance()
+        
+        var parameters: [String] = []
+        if peek() != .closeParen {
+            // Handle 'void' specially? int main(void)
+            if peek() == .keywordVoid {
+                 advance()
+                 // If it is void, it must be the only thing
+                 if peek() != .closeParen {
+                     throw ParserError.expectedToken(")", found: peek())
+                 }
+            } else {
+                 // Parse first parameter
+                 try consume(.keywordInt)
+                 guard case .identifier(let paramName) = peek() else {
+                     throw ParserError.expectedToken("identifier", found: peek())
+                 }
+                 advance()
+                 parameters.append(paramName)
+                 
+                 while peek() == .comma {
+                     advance()
+                     try consume(.keywordInt)
+                     guard case .identifier(let paramName) = peek() else {
+                         throw ParserError.expectedToken("identifier", found: peek())
+                     }
+                     advance()
+                     parameters.append(paramName)
+                 }
+            }
         }
         try consume(.closeParen)
         try consume(.openBrace)
 
-        var body: [BlockItem] = []
+        var bodyItems: [BlockItem] = []
         while peek() != .closeBrace && peek() != .eof {
-            body.append(try parseBlockItem())
+            bodyItems.append(try parseBlockItem())
         }
 
         try consume(.closeBrace)
 
-        return FunctionDeclaration(name: name, body: body)
+        return FunctionDeclaration(name: name, parameters: parameters, body: .compound(bodyItems))
     }
 
     mutating func parse() throws -> Program {
-        let function = try parseFunction()
-
-        guard peek() == .eof else {
-            throw ParserError.unexpectedToken(peek())
+        var functions: [FunctionDeclaration] = []
+        
+        while peek() != .eof {
+            functions.append(try parseFunction())
         }
 
-        return Program(function: function)
+        return Program(functions: functions)
     }
 }

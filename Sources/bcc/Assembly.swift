@@ -5,10 +5,11 @@ private func indent(_ s: String) -> String {
 }
 
 struct AsmProgram: Equatable, CustomStringConvertible {
-    let function: AsmFunction
+    let functions: [AsmFunction]
 
     var description: String {
-        "AsmProgram(\n\(indent(function.description))\n)"
+        let funcsDesc = functions.map { $0.description }.joined(separator: "\n\n")
+        return "AsmProgram(\n\(indent(funcsDesc))\n)"
     }
 }
 struct AsmFunction: Equatable, CustomStringConvertible {
@@ -23,7 +24,15 @@ struct AsmFunction: Equatable, CustomStringConvertible {
 }
 
 enum AsmRegister: String, Equatable, CustomStringConvertible {
-    case rax, eax, rbp, rsp, r10, r10d
+    case rax, eax
+    case rbp, rsp
+    case rdi, edi
+    case rsi, esi
+    case rdx, edx
+    case rcx, ecx
+    case r8, r8d
+    case r9, r9d
+    case r10, r10d
 
     var description: String {
         "%" + self.rawValue
@@ -55,6 +64,7 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
     case pushq(AsmOperand)
     case popq(AsmOperand)
     case movq(AsmOperand, AsmOperand) // 64-bit move
+    case addq(AsmOperand, AsmOperand) // 64-bit add
     case subq(AsmOperand, AsmOperand) // 64-bit subtract
 
     // Operations (32-bit)
@@ -76,6 +86,7 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
     case jmp(String)
     case je(String)
     case jne(String)
+    case call(String)
     case label(String)
     case ret
 
@@ -87,6 +98,8 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
             return "popq \(op.description)"
         case .movq(let src, let dest):
             return "movq \(src.description), \(dest.description)"
+        case .addq(let src, let dest):
+            return "addq \(src.description), \(dest.description)"
         case .subq(let src, let dest):
             return "subq \(src.description), \(dest.description)"
         case .movl(let src, let dest):
@@ -125,8 +138,10 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
             return "je \(target)"
         case .jne(let target):
             return "jne \(target)"
+        case .call(let funcName):
+            return "call _\(funcName)"
         case .label(let name):
-            return "\(name):"
+            return "_\(name):"
         case .ret:
             return "ret"
         }

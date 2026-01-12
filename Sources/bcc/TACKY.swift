@@ -5,20 +5,22 @@ private func indent(_ s: String) -> String {
 }
 
 struct TackyProgram: Equatable, CustomStringConvertible {
-    let function: TackyFunction
+    let functions: [TackyFunction]
     
     var description: String {
-        "TackyProgram(\n\(indent(function.description))\n)"
+        let funcsDesc = functions.map { $0.description }.joined(separator: "\n\n")
+        return "TackyProgram(\n\(indent(funcsDesc))\n)"
     }
 }
 
 struct TackyFunction: Equatable, CustomStringConvertible {
     let name: String
+    let parameters: [String]
     let body: [TackyInstruction]
 
     var description: String {
         let bodyDesc = body.map { $0.description }.joined(separator: "\n")
-        return "TackyFunction(name: \(name)) {\n\(indent(bodyDesc))\n}"
+        return "TackyFunction(name: \(name), params: \(parameters)) {\n\(indent(bodyDesc))\n}"
     }
 }
 
@@ -85,6 +87,7 @@ enum TackyInstruction: Equatable, CustomStringConvertible {
     case jumpIfZero(condition: TackyValue, target: String)
     case jumpIfNotZero(condition: TackyValue, target: String)
     case label(String)
+    case call(name: String, args: [TackyValue], dest: TackyValue)
 
     var description: String {
         switch self {
@@ -104,6 +107,9 @@ enum TackyInstruction: Equatable, CustomStringConvertible {
             return "JumpIfNotZero(\(cond.description), \(target))"
         case .label(let name):
             return "Label(\(name))"
+        case .call(let name, let args, let dest):
+            let argsDesc = args.map { $0.description }.joined(separator: ", ")
+            return "\(dest.description) = Call \(name)(\(argsDesc))"
         }
     }
 }

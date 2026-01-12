@@ -26,6 +26,7 @@ enum Token: Equatable {
     case slash
     case questionMark
     case colon
+    case comma
     case ampersandAmpersand
     case pipePipe
     case equalEqual

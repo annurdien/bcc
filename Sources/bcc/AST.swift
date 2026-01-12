@@ -1,59 +1,56 @@
-import Foundation
-
 private func indent(_ s: String) -> String {
     return s.split(separator: "\n").map { "  " + $0 }.joined(separator: "\n")
 }
 
-// Program(function_definition)
 struct Program: Equatable, CustomStringConvertible {
-    let function: FunctionDeclaration
+    let functions: [FunctionDeclaration]
+    
+    var function: FunctionDeclaration {
+        return functions.last!
+    }
 
     var description: String {
-        "Program(\n\(indent(function.description))\n)"
+        let funcsDesc = functions.map { $0.description }.joined(separator: "\n")
+        return "Program(\n\(indent(funcsDesc))\n)"
     }
 }
 
-// function_definition = Function(identifier name, block_item* body)
 struct FunctionDeclaration: Equatable, CustomStringConvertible {
     let name: String
-    let body: [BlockItem]
+    let parameters: [String]
+    let body: Statement
 
     var description: String {
-        let nameLine = "name=\"\(name)\","
-        let bodyDesc = body.map { $0.description }.joined(separator: "\n")
-        let bodyLine = "body=[\n\(indent(bodyDesc))\n]"
-        
-        return "Function(\n\(indent(nameLine))\n\(indent(bodyLine))\n)"
+        let paramsDesc = parameters.joined(separator: ", ")
+        return "Function(name: \"\(name)\", params: [\(paramsDesc)], body:\n\(indent(body.description))\n)"
     }
 }
 
-// block_item = Statement | Declaration
-enum BlockItem: Equatable, CustomStringConvertible {
-    case statement(Statement)
-    case declaration(Declaration)
-
-    var description: String {
-        switch self {
-        case .statement(let s): return s.description
-        case .declaration(let d): return d.description
-        }
-    }
-}
-
-// declaration = Declare(identifier name, exp? initializer)
 struct Declaration: Equatable, CustomStringConvertible {
     let name: String
     let initializer: Expression?
 
     var description: String {
-        if let initExp = initializer {
-            return "Declare(\(name), init: \(initExp.description))"
+        if let initExpr = initializer {
+            return "Declare(name: \(name), init:\n\(indent(initExpr.description)))"
+        } else {
+            return "Declare(name: \(name))"
         }
-        return "Declare(\(name))"
     }
 }
 
-// statement = Return(exp) | Expression(exp) | If(cond, then, else?) | Compound(block_item*) | While(cond, body) | DoWhile(body, cond) | For(init, cond, post, body) | Break | Continue
+indirect enum BlockItem: Equatable, CustomStringConvertible {
+    case statement(Statement)
+    case declaration(Declaration)
+    
+    var description: String {
+        switch self {
+        case .statement(let s): return "Stmt(\n\(indent(s.description)))"
+        case .declaration(let d): return "Decl(\n\(indent(d.description)))"
+        }
+    }
+}
+
 indirect enum Statement: Equatable, CustomStringConvertible {
     case `return`(Expression)
     case expression(Expression)
@@ -67,39 +64,34 @@ indirect enum Statement: Equatable, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case .return(let exp):
-            return "Return(\n\(indent(exp.description))\n)"
-        case .expression(let exp):
-            return "ExprStmt(\n\(indent(exp.description))\n)"
+        case .return(let expr):
+            return "Return(\n\(indent(expr.description))\n)"
+        case .expression(let expr):
+            return "ExprStmt(\n\(indent(expr.description))\n)"
         case .if(let cond, let thenStmt, let elseStmt):
-            var desc = "If(\n\(indent("cond: " + cond.description))\n\(indent("then: " + thenStmt.description))\n"
-            if let elseStmt = elseStmt {
-                desc += indent("else: " + elseStmt.description) + "\n"
+            var desc = "If(\n\(indent(cond.description)),\n\(indent(thenStmt.description))"
+            if let e = elseStmt {
+                desc += ",\n\(indent(e.description))"
             }
-            desc += ")"
+            desc += "\n)"
             return desc
         case .compound(let items):
-            let desc = items.map { $0.description }.joined(separator: "\n")
-            return "Block {\n\(indent(desc))\n}"
+            let itemDesc = items.map { $0.description }.joined(separator: "\n")
+            return "Compound(\n\(indent(itemDesc))\n)"
         case .while(let cond, let body):
-             return "While(\n\(indent("cond: " + cond.description))\n\(indent("body: " + body.description))\n)"
+            return "While(\n\(indent(cond.description)),\n\(indent(body.description))\n)"
         case .doWhile(let body, let cond):
-             return "DoWhile(\n\(indent("body: " + body.description))\n\(indent("cond: " + cond.description))\n)"
+            return "DoWhile(\n\(indent(body.description)),\n\(indent(cond.description))\n)"
         case .for(let initClause, let cond, let post, let body):
-            var parts = ["init: \(initClause.description)"]
-            if let c = cond { parts.append("cond: \(c.description)") }
-            if let p = post { parts.append("post: \(p.description)") }
-            parts.append("body: \(body.description)")
-            return "For(\n\(indent(parts.joined(separator: "\n")))\n)"
-        case .break:
-            return "Break"
-        case .continue:
-            return "Continue"
+            let cDesc = cond?.description ?? "Core.Empty"
+            let pDesc = post?.description ?? "Core.Empty"
+            return "For(\n\(indent(initClause.description)),\n\(indent(cDesc)),\n\(indent(pDesc)),\n\(indent(body.description))\n)"
+        case .break: return "Break"
+        case .continue: return "Continue"
         }
     }
 }
 
-// For loop initialization can be a declaration or an expression or empty
 enum ForInit: Equatable, CustomStringConvertible {
     case declaration(Declaration)
     case expression(Expression?)
@@ -112,7 +104,6 @@ enum ForInit: Equatable, CustomStringConvertible {
     }
 }
 
-// unary_operator = Complement | Negate | Not
 enum UnaryOperator: Equatable, CustomStringConvertible {
     case negate
     case complement
@@ -120,9 +111,9 @@ enum UnaryOperator: Equatable, CustomStringConvertible {
 
     var description: String {
         switch self {
-            case .negate: return "Negate"
-            case .complement: return "Complement"
-            case .logicalNot: return "LogicalNot"
+        case .negate: return "Negate"
+        case .complement: return "BitwiseNot"
+        case .logicalNot: return "LogicalNot"
         }
     }
 }
@@ -159,7 +150,6 @@ enum BinaryOperator: Equatable, CustomStringConvertible {
     }
 }
 
-// exp = Constant(int) | Unary(unary_operator, exp) | Binary(binary_operator, exp, exp) | Var(identifier) | Assignment(identifier, exp)
 indirect enum Expression: Equatable, CustomStringConvertible {
     case constant(Int)
     case unary(UnaryOperator, Expression)
@@ -167,13 +157,12 @@ indirect enum Expression: Equatable, CustomStringConvertible {
     case variable(String)
     case assignment(name: String, expression: Expression)
     case conditional(condition: Expression, thenExpr: Expression, elseExpr: Expression)
+    case functionCall(name: String, arguments: [Expression])
 
     var description: String {
         switch self {
         case .constant(let value):
             return "Constant(\(value))"
-        case .conditional(let cond, let thenExpr, let elseExpr):
-            return "Conditional(\n\(indent(cond.description)) ?\n\(indent(thenExpr.description)) :\n\(indent(elseExpr.description))\n)"
         case .unary(let op, let exp):
             let opLine = "op: \(op.description),"
             let expLine = "exp:\n\(indent(exp.description))"
@@ -187,6 +176,11 @@ indirect enum Expression: Equatable, CustomStringConvertible {
             return "Var(\(name))"
         case .assignment(let name, let exp):
              return "Assign(name: \(name), val:\n\(indent(exp.description)))"
+        case .conditional(let cond, let thenExpr, let elseExpr):
+            return "Conditional(\n\(indent(cond.description)) ?\n\(indent(thenExpr.description)) :\n\(indent(elseExpr.description))\n)"
+        case .functionCall(let name, let args):
+            let argsDesc = args.map { $0.description }.joined(separator: ", ")
+            return "Call(name: \(name), args: [\(argsDesc)])"
         }
     }
 }
