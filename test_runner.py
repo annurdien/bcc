@@ -17,34 +17,49 @@ def run_command(command):
     except subprocess.CalledProcessError as e:
         return e
 
-def test_file(filepath, expected_return_code, index, total):
+def test_file(filepath, expected_return_code, expect_fail, index, total):
     print(f"[{index}/{total}] Testing {filepath}...", end=" ", flush=True)
     
-    filename = filepath.stem
-    executable = f"./tests/{filename}"
+    filepath_obj = Path(filepath)
+    filename = filepath_obj.stem
+    executable = filepath_obj.parent / filename
     
     # 1. Compile
-    compile_cmd = f"make {executable}"
-    
-    # Because our Makefile target is generic, we might need a specific way to call it or rely on the python script to run the compiler
-    # Let's rely on the python script to invoke the compiler binary directly to be safe and cleaner
-    
     compiler = ".build/debug/bcc"
-    assembly_file = filepath.with_suffix(".s")
+    assembly_file = filepath_obj.with_suffix(".s")
     
     # Run Compiler
     cmd1 = f"{compiler} {filepath} > {assembly_file}"
     result = subprocess.run(cmd1, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    
+    if expect_fail:
+        if result.returncode != 0:
+            print("PASSED (Expected Fail)")
+            if assembly_file.exists():
+                os.remove(assembly_file)
+            return True
+        else:
+            print("FAILED (Expected Compilation Error, but succeeded)")
+            # Clean up artifacts if it surprisingly succeeded
+            if assembly_file.exists():
+                os.remove(assembly_file)
+            return False
+
+    # Positive Case
     if result.returncode != 0:
         print("FAILED (Compilation)")
         print(result.stderr.decode())
+        if assembly_file.exists():
+            os.remove(assembly_file)
         return False
 
     # Assemble
-    object_file = filepath.with_suffix(".o")
+    object_file = filepath_obj.with_suffix(".o")
     cmd2 = f"as -arch x86_64 {assembly_file} -o {object_file}"
     if subprocess.run(cmd2, shell=True).returncode != 0:
         print("FAILED (Assembly)")
+        if assembly_file.exists(): os.remove(assembly_file)
+        if object_file.exists(): os.remove(object_file)
         return False
 
     # Link
@@ -52,22 +67,28 @@ def test_file(filepath, expected_return_code, index, total):
     cmd3 = f"clang -arch x86_64 {sysroot_flag} {object_file} -o {executable}"
     if subprocess.run(cmd3, shell=True).returncode != 0:
         print("FAILED (Linking)")
+        if assembly_file.exists(): os.remove(assembly_file)
+        if object_file.exists(): os.remove(object_file)
         return False
         
     # Run
     try:
-        subprocess.run(executable, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(str(executable), check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return_code = 0 
     except subprocess.CalledProcessError as e:
         return_code = e.returncode
+    except OSError as e:
+        print(f"FAILED (Execution error: {e})")
+        return_code = -1
         
+    # Cleanup
+    if assembly_file.exists(): os.remove(assembly_file)
+    if object_file.exists(): os.remove(object_file)
+    if executable.exists(): os.remove(executable)
+
     # Check result
     if return_code == expected_return_code:
         print("PASSED")
-        # Cleanup
-        os.remove(assembly_file)
-        os.remove(object_file)
-        os.remove(executable)
         return True
     else:
         print(f"FAILED (Expected {expected_return_code}, got {return_code})")
@@ -75,22 +96,26 @@ def test_file(filepath, expected_return_code, index, total):
 
 def scan_tests_in_dir(directory):
     discovered_tests = []
-    # Walk directory to find .c files
-    if not os.path.exists(directory):
-        return []
-        
-    for filename in os.listdir(directory):
-        if not filename.endswith(".c"):
-            continue
-            
-        filepath = os.path.join(directory, filename)
-        with open(filepath, 'r') as f:
-            content = f.read()
-            # Look for // RETURN: {int}
-            match = re.search(r"//\s*RETURN:\s*(\d+)", content)
-            if match:
-                expected_code = int(match.group(1))
-                discovered_tests.append((filepath, expected_code))
+    # Recursively walk directory
+    for root, dirs, files in os.walk(directory):
+        for filename in files:
+            if not filename.endswith(".c"):
+                continue
+                
+            filepath = os.path.join(root, filename)
+            with open(filepath, 'r') as f:
+                content = f.read()
+                
+                # Check for // FAIL
+                if "// FAIL" in content:
+                     discovered_tests.append((filepath, 0, True))
+                     continue
+
+                # Look for // RETURN: {int}
+                match = re.search(r"//\s*RETURN:\s*(\d+)", content)
+                if match:
+                    expected_code = int(match.group(1))
+                    discovered_tests.append((filepath, expected_code, False))
                 
     return discovered_tests
 
@@ -103,18 +128,23 @@ def main():
         
     # Discovery
     final_tests = scan_tests_in_dir("tests")
+    if not final_tests:
+        print("No tests found.")
+        sys.exit(0)
     
     # Sort for consistent output
     final_tests.sort(key=lambda x: x[0])
     
-    passed = 0
     total = len(final_tests)
-    for i, (test_path, expected) in enumerate(final_tests, 1):
-        if test_file(Path(test_path), expected, i, total):
+    passed = 0
+    
+    for i, test in enumerate(final_tests):
+        filepath, expected, expect_fail = test
+        if test_file(filepath, expected, expect_fail, i+1, total):
             passed += 1
             
-    print(f"\n{passed}/{len(final_tests)} tests passed.")
-    if passed != len(final_tests):
+    print(f"\nSummary: {passed}/{total} tests passed.")
+    if passed != total:
         sys.exit(1)
 
 if __name__ == "__main__":

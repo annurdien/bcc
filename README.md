@@ -28,6 +28,12 @@
     - [x] If Statements (`if (cond) { ... } else { ... }`)
     - [x] Conditional Operator (`cond ? true : false`)
     - [x] Compound Statements / Blocks (`{ ... }`)
+- [x] Stage 7 - Loops
+    - [x] While (`while`)
+    - [x] Do-While (`do ... while`)
+    - [x] For (`for`)
+    - [x] Break (`break`)
+    - [x] Continue (`continue`)
 
 
 
