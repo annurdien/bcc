@@ -17,8 +17,8 @@ def run_command(command):
     except subprocess.CalledProcessError as e:
         return e
 
-def test_file(filepath, expected_return_code):
-    print(f"Testing {filepath}...", end=" ")
+def test_file(filepath, expected_return_code, index, total):
+    print(f"[{index}/{total}] Testing {filepath}...", end=" ", flush=True)
     
     filename = filepath.stem
     executable = f"./tests/{filename}"
@@ -96,7 +96,7 @@ def scan_tests_in_dir(directory):
 
 def main():
     # Build compiler first
-    print("Building compiler...")
+    print("Building compiler...", flush=True)
     if subprocess.run("swift build", shell=True).returncode != 0:
         print("Compiler build failed.")
         sys.exit(1)
@@ -108,8 +108,9 @@ def main():
     final_tests.sort(key=lambda x: x[0])
     
     passed = 0
-    for test_path, expected in final_tests:
-        if test_file(Path(test_path), expected):
+    total = len(final_tests)
+    for i, (test_path, expected) in enumerate(final_tests, 1):
+        if test_file(Path(test_path), expected, i, total):
             passed += 1
             
     print(f"\n{passed}/{len(final_tests)} tests passed.")

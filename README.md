@@ -20,6 +20,16 @@
     - [x] Equality (`==, !=`)
     - [x] Logical AND (`&&`)
     - [x] Logical OR (`||`)
+- [x] Stage 5 - Local Variables & Assignment
+    - [x] Variable Declaration (`int x = ...`)
+    - [x] Variable Usage (`return x`)
+    - [x] Assignment (`x = y`)
+- [x] Stage 6 - Conditionals
+    - [x] If Statements (`if (cond) { ... } else { ... }`)
+    - [x] Conditional Operator (`cond ? true : false`)
+    - [x] Compound Statements / Blocks (`{ ... }`)
+
+
 
 ### Test System
 ![CI](https://github.com/annurdien/bcc/actions/workflows/ci.yml/badge.svg)
