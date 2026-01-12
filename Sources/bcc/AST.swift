@@ -53,12 +53,17 @@ struct Declaration: Equatable, CustomStringConvertible {
     }
 }
 
-// statement = Return(exp) | Expression(exp) | If(cond, then, else?) | Compound(block_item*)
+// statement = Return(exp) | Expression(exp) | If(cond, then, else?) | Compound(block_item*) | While(cond, body) | DoWhile(body, cond) | For(init, cond, post, body) | Break | Continue
 indirect enum Statement: Equatable, CustomStringConvertible {
     case `return`(Expression)
     case expression(Expression)
     case `if`(condition: Expression, then: Statement, `else`: Statement?)
     case compound([BlockItem])
+    case `while`(condition: Expression, body: Statement)
+    case doWhile(body: Statement, condition: Expression)
+    case `for`(initial: ForInit, condition: Expression?, post: Expression?, body: Statement)
+    case `break`
+    case `continue`
 
     var description: String {
         switch self {
@@ -76,6 +81,33 @@ indirect enum Statement: Equatable, CustomStringConvertible {
         case .compound(let items):
             let desc = items.map { $0.description }.joined(separator: "\n")
             return "Block {\n\(indent(desc))\n}"
+        case .while(let cond, let body):
+             return "While(\n\(indent("cond: " + cond.description))\n\(indent("body: " + body.description))\n)"
+        case .doWhile(let body, let cond):
+             return "DoWhile(\n\(indent("body: " + body.description))\n\(indent("cond: " + cond.description))\n)"
+        case .for(let initClause, let cond, let post, let body):
+            var parts = ["init: \(initClause.description)"]
+            if let c = cond { parts.append("cond: \(c.description)") }
+            if let p = post { parts.append("post: \(p.description)") }
+            parts.append("body: \(body.description)")
+            return "For(\n\(indent(parts.joined(separator: "\n")))\n)"
+        case .break:
+            return "Break"
+        case .continue:
+            return "Continue"
+        }
+    }
+}
+
+// For loop initialization can be a declaration or an expression or empty
+enum ForInit: Equatable, CustomStringConvertible {
+    case declaration(Declaration)
+    case expression(Expression?)
+    
+    var description: String {
+        switch self {
+        case .declaration(let d): return d.description
+        case .expression(let e): return e?.description ?? "Empty"
         }
     }
 }

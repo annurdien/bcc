@@ -70,7 +70,16 @@ struct bcc {
 
         // MARK: - TACKY Generation
         var tackyGenerator = TACKYGenerator()
-        let tackyProgram = tackyGenerator.generate(program: ast)
+        let tackyProgram: TackyProgram
+        do {
+            tackyProgram = try tackyGenerator.generate(program: ast)
+        } catch let error as SemanticError {
+            printErr(error)
+            exit(1)
+        } catch {
+            printErr("An unexpected error occurred during code generation: \(error)")
+            exit(1)
+        }
 
         if printTACKY {
             print(tackyProgram)

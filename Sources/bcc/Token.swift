@@ -7,6 +7,11 @@ enum Token: Equatable {
     case keywordVoid
     case keywordIf
     case keywordElse
+    case keywordDo
+    case keywordWhile
+    case keywordFor
+    case keywordBreak
+    case keywordContinue
 
     // Single character tokens
     case openParen

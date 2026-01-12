@@ -195,6 +195,11 @@ struct Lexer {
         case "void": return .keywordVoid
         case "if": return .keywordIf
         case "else": return .keywordElse
+        case "do": return .keywordDo
+        case "while": return .keywordWhile
+        case "for": return .keywordFor
+        case "break": return .keywordBreak
+        case "continue": return .keywordContinue
         default: return .identifier(identifierString)
         }
     }

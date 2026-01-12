@@ -183,12 +183,13 @@ struct Parser {
     }
 
     private mutating func parseStatement() throws -> Statement {
-        if peek() == .keywordReturn {
+        let token = peek()
+        if token == .keywordReturn {
             advance()
             let expression = try parseExpression()
             try consume(.semicolon)
             return .return(expression)
-        } else if peek() == .keywordIf {
+        } else if token == .keywordIf {
             advance()
             try consume(.openParen)
             let condition = try parseExpression()
@@ -200,7 +201,7 @@ struct Parser {
                 elseStmt = try parseStatement()
             }
             return .if(condition: condition, then: thenStmt, else: elseStmt)
-        } else if peek() == .openBrace {
+        } else if token == .openBrace {
             advance()
             var items: [BlockItem] = []
             while peek() != .closeBrace && peek() != .eof {
@@ -208,6 +209,68 @@ struct Parser {
             }
             try consume(.closeBrace)
             return .compound(items)
+        } else if token == .keywordBreak {
+            advance()
+            try consume(.semicolon)
+            return .break
+        } else if token == .keywordContinue {
+            advance()
+            try consume(.semicolon)
+            return .continue
+        } else if token == .keywordWhile {
+            advance()
+            try consume(.openParen)
+            let condition = try parseExpression()
+            try consume(.closeParen)
+            let body = try parseStatement()
+            return .while(condition: condition, body: body)
+        } else if token == .keywordDo {
+            advance()
+            let body = try parseStatement()
+            try consume(.keywordWhile)
+            try consume(.openParen)
+            let condition = try parseExpression()
+            try consume(.closeParen)
+            try consume(.semicolon)
+            return .doWhile(body: body, condition: condition)
+        } else if token == .keywordFor {
+            advance()
+            try consume(.openParen)
+            
+            // Init clause (can be declaration or expression or empty)
+            let initClause: ForInit
+            if peek() == .keywordInt {
+                initClause = .declaration(try parseDeclaration())
+            } else {
+                if peek() == .semicolon {
+                    initClause = .expression(nil)
+                    try consume(.semicolon) // Consumed by the "expression" parsing logic? No, we handle semicolon here.
+                    // Wait, if it's expression(nil), we must consume the semicolon explicitly here
+                    // If it is expression(expr), parseExpression usually doesn't consume semicolon.
+                } else {
+                    let expr = try parseExpression()
+                    try consume(.semicolon)
+                    initClause = .expression(expr)
+                }
+            }
+            
+            // Condition clause
+            var condition: Expression? = nil
+            if peek() != .semicolon {
+                condition = try parseExpression()
+            }
+            try consume(.semicolon)
+            
+            // Post clause
+            var post: Expression? = nil
+            if peek() != .closeParen {
+                post = try parseExpression()
+            }
+            try consume(.closeParen)
+            
+            let body = try parseStatement()
+            return .for(initial: initClause, condition: condition, post: post, body: body)
+            
         } else {
             let expression = try parseExpression()
             try consume(.semicolon)

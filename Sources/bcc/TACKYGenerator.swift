@@ -1,12 +1,31 @@
 import Foundation
 
+enum SemanticError: Error, CustomStringConvertible {
+    case breakOutsideLoop
+    case continueOutsideLoop
+    case undeclaredVariable(String)
+
+    var description: String {
+        switch self {
+        case .breakOutsideLoop: return "Semantic Error: 'break' statement outside of loop"
+        case .continueOutsideLoop: return "Semantic Error: 'continue' statement outside of loop"
+        case .undeclaredVariable(let name): return "Semantic Error: Variable '\(name)' undeclared"
+        }
+    }
+}
+
 struct TACKYGenerator {
     private var tempCounter = 0
     private var labelCounter = 0
     
+    // Stack of (continueLabel, breakLabel) for loop resolution
+    private var loopStack: [(String, String)] = []
+    
     // Map from original variable name to current unique TACKY variable name
     // e.g. "x" -> "x.0"
     private var variableMap: [String: String] = [:]
+    
+    private var declaredVariables: Set<String> = []
 
     private mutating func makeTemporary() -> TackyValue {
         let tempName = "tmp.\(tempCounter)"
@@ -21,72 +40,64 @@ struct TACKYGenerator {
     }
     
     // Rename user variable to unique TACKY variable to handle shadowing later
-    // For now we just use the name directly or append an index if we want SSA-like behavior,
-    // but basic stack allocation doesn't require SSA. 
-    // However, to distinguish separate variables with same name in different scopes (if we had them),
-    // we should map them. For Stage 5 (Function scope), just name is fine? 
-    // Actually, TACKY usually assumes unique names for all variables.
-    // Let's generate "var.name.count"
-    private mutating func resolveVariable(name: String) -> String {
-        // For Stage 5, we assume variables are declared once per function (no nested scopes yet in Parser)
-        // But to be safe and future proof, let's just use the name.
-        // Wait, 'variableMap' is needed if we want to support shadowing.
-        // If we just use the name "x", and we have "int x" inside a loop later, it clashes.
-        // Let's stick to using the user name for now as we don't have nested blocks implemented yet.
+    // For now we just use the name directly
+    private mutating func resolveVariable(name: String) throws -> String {
+        guard declaredVariables.contains(name) else {
+            throw SemanticError.undeclaredVariable(name)
+        }
         return name
     }
 
-    mutating func generate(program: Program) -> TackyProgram {
-        let tackyFunction = generate(function: program.function)
+    mutating func generate(program: Program) throws -> TackyProgram {
+        let tackyFunction = try generate(function: program.function)
         return TackyProgram(function: tackyFunction)
     }
 
-    private mutating func generate(function: FunctionDeclaration) -> TackyFunction {
+    private mutating func generate(function: FunctionDeclaration) throws -> TackyFunction {
         var instructions: [TackyInstruction] = []
         
         // Reset state for new function
         variableMap.removeAll() 
+        declaredVariables.removeAll()
         
         for item in function.body {
-            generate(blockItem: item, into: &instructions)
+            try generate(blockItem: item, into: &instructions)
         }
         
-        // Add a default return 0 if main? Or just return 0. 
-        // C standard says main returns 0 if no return, but let's rely on user valid code for now.
-        // Or append a return 0 just in case.
+        // Add a default return 0 just in case.
         instructions.append(.return(.constant(0)))
         
         return TackyFunction(name: function.name, body: instructions)
     }
 
-    private mutating func generate(blockItem: BlockItem, into instructions: inout [TackyInstruction]) {
+    private mutating func generate(blockItem: BlockItem, into instructions: inout [TackyInstruction]) throws {
         switch blockItem {
         case .statement(let stmt):
-            generate(statement: stmt, into: &instructions)
+            try generate(statement: stmt, into: &instructions)
         case .declaration(let decl):
             if let initExpr = decl.initializer {
-                let initVal = generate(expression: initExpr, into: &instructions)
+                let initVal = try generate(expression: initExpr, into: &instructions)
                 instructions.append(.copy(src: initVal, dest: .variable(decl.name)))
             } else {
-                // Uninitialized int. Optionally zero it, or leave it. 
-                // C doesn't initialize local variables.
+                // Uninitialized int.
             }
+            declaredVariables.insert(decl.name)
         }
     }
 
-    private mutating func generate(statement: Statement, into instructions: inout [TackyInstruction]) {
+    private mutating func generate(statement: Statement, into instructions: inout [TackyInstruction]) throws {
         switch statement {
             case .return(let expression):
-                let val = generate(expression: expression, into: &instructions)
+                let val = try generate(expression: expression, into: &instructions)
                 instructions.append(.return(val))
             case .expression(let expression):
-                _ = generate(expression: expression, into: &instructions)
+                _ = try generate(expression: expression, into: &instructions)
             case .compound(let items):
                 for item in items {
-                    generate(blockItem: item, into: &instructions)
+                    try generate(blockItem: item, into: &instructions)
                 }
             case .if(let cond, let thenStmt, let elseStmt):
-                let condVal = generate(expression: cond, into: &instructions)
+                let condVal = try generate(expression: cond, into: &instructions)
                 let elseLabel = makeLabel(suffix: "_else")
                 let endLabel = makeLabel(suffix: "_end")
                 
@@ -94,7 +105,7 @@ struct TACKYGenerator {
                 instructions.append(.jumpIfZero(condition: condVal, target: elseStmt != nil ? elseLabel : endLabel))
                 
                 // Then block
-                generate(statement: thenStmt, into: &instructions)
+                try generate(statement: thenStmt, into: &instructions)
                 if elseStmt != nil {
                      instructions.append(.jump(target: endLabel)) // Skip else block
                 }
@@ -102,47 +113,135 @@ struct TACKYGenerator {
                 // Else block
                 if let elseStmt = elseStmt {
                     instructions.append(.label(elseLabel))
-                    generate(statement: elseStmt, into: &instructions)
+                    try generate(statement: elseStmt, into: &instructions)
                 }
                 
                 instructions.append(.label(endLabel))
+                
+            case .break:
+                guard let (_, breakLabel) = loopStack.last else {
+                     throw SemanticError.breakOutsideLoop
+                }
+                instructions.append(.jump(target: breakLabel))
+                
+            case .continue:
+                guard let (continueLabel, _) = loopStack.last else {
+                     throw SemanticError.continueOutsideLoop
+                }
+                instructions.append(.jump(target: continueLabel))
+                
+            case .doWhile(let body, let cond):
+                let startLabel = makeLabel(suffix: "_do_start")
+                let continueLabel = makeLabel(suffix: "_do_continue") // used for 'continue'
+                let breakLabel = makeLabel(suffix: "_do_break")
+                
+                loopStack.append((continueLabel, breakLabel))
+                
+                instructions.append(.label(startLabel))
+                try generate(statement: body, into: &instructions)
+                
+                instructions.append(.label(continueLabel))
+                let condVal = try generate(expression: cond, into: &instructions)
+                // If true, jump back to start
+                instructions.append(.jumpIfNotZero(condition: condVal, target: startLabel))
+                
+                instructions.append(.label(breakLabel))
+                loopStack.removeLast()
+                
+            case .while(let cond, let body):
+                let continueLabel = makeLabel(suffix: "_while_continue")
+                let breakLabel = makeLabel(suffix: "_while_break")
+                let startLabel = makeLabel(suffix: "_while_start") 
+                
+                loopStack.append((continueLabel, breakLabel))
+                
+                instructions.append(.label(continueLabel)) 
+                
+                let condVal = try generate(expression: cond, into: &instructions)
+                instructions.append(.jumpIfZero(condition: condVal, target: breakLabel))
+                
+                try generate(statement: body, into: &instructions)
+                instructions.append(.jump(target: continueLabel))
+                
+                instructions.append(.label(breakLabel))
+                loopStack.removeLast()
+                
+            case .for(let initClause, let cond, let post, let body):
+                let startLabel = makeLabel(suffix: "_for_start")
+                let continueLabel = makeLabel(suffix: "_for_continue")
+                let breakLabel = makeLabel(suffix: "_for_break")
+                
+                // 1. Initialization
+                switch initClause {
+                case .declaration(let decl):
+                    try generate(blockItem: .declaration(decl), into: &instructions)
+                case .expression(let expr):
+                    if let expr = expr {
+                         _ = try generate(expression: expr, into: &instructions)
+                    }
+                }
+                
+                loopStack.append((continueLabel, breakLabel))
+                
+                instructions.append(.label(startLabel))
+                
+                // 2. Condition
+                if let cond = cond {
+                    let condVal = try generate(expression: cond, into: &instructions)
+                    instructions.append(.jumpIfZero(condition: condVal, target: breakLabel))
+                }
+                
+                // 3. Body
+                try generate(statement: body, into: &instructions)
+                
+                // 4. Continue target (Post-expression)
+                instructions.append(.label(continueLabel))
+                if let post = post {
+                    _ = try generate(expression: post, into: &instructions)
+                }
+                instructions.append(.jump(target: startLabel))
+                
+                instructions.append(.label(breakLabel))
+                loopStack.removeLast()
         }
     }
 
-    private mutating func generate(expression: Expression, into instructions: inout [TackyInstruction]) -> TackyValue {
+    private mutating func generate(expression: Expression, into instructions: inout [TackyInstruction]) throws -> TackyValue {
         switch expression {
         case .constant(let value):
             return .constant(value)
         
         case .variable(let name):
-            return .variable(name)
+             let varName = try resolveVariable(name: name)
+             return .variable(varName)
             
         case .conditional(let cond, let thenExpr, let elseExpr):
-            let condVal = generate(expression: cond, into: &instructions)
+            let condVal = try generate(expression: cond, into: &instructions)
             let result = makeTemporary()
             let elseLabel = makeLabel(suffix: "_ternary_else")
             let endLabel = makeLabel(suffix: "_ternary_end")
             
             instructions.append(.jumpIfZero(condition: condVal, target: elseLabel))
             
-            let thenVal = generate(expression: thenExpr, into: &instructions)
+            let thenVal = try generate(expression: thenExpr, into: &instructions)
             instructions.append(.copy(src: thenVal, dest: result))
             instructions.append(.jump(target: endLabel))
             
             instructions.append(.label(elseLabel))
-            let elseVal = generate(expression: elseExpr, into: &instructions)
+            let elseVal = try generate(expression: elseExpr, into: &instructions)
             instructions.append(.copy(src: elseVal, dest: result))
             
             instructions.append(.label(endLabel))
             return result
 
         case .assignment(let name, let expr):
-            let val = generate(expression: expr, into: &instructions)
-            instructions.append(.copy(src: val, dest: .variable(name)))
-            return .variable(name)
+            let val = try generate(expression: expr, into: &instructions)
+            let varName = try resolveVariable(name: name)
+            instructions.append(.copy(src: val, dest: .variable(varName)))
+            return .variable(varName)
 
         case .unary(let op, let innerExpression):
-            let sourceValue = generate(expression: innerExpression, into: &instructions)
+            let sourceValue = try generate(expression: innerExpression, into: &instructions)
             let destValue = makeTemporary()
 
             let tackyOp: TackyUnaryOperator = switch op {
@@ -162,11 +261,11 @@ struct TACKYGenerator {
                 let endLabel = makeLabel(suffix: "_end")
                 
                 // Eval LHS
-                let lhs = generate(expression: lhsExp, into: &instructions)
+                let lhs = try generate(expression: lhsExp, into: &instructions)
                 instructions.append(.jumpIfZero(condition: lhs, target: falseLabel))
                 
                 // Eval RHS
-                let rhs = generate(expression: rhsExp, into: &instructions)
+                let rhs = try generate(expression: rhsExp, into: &instructions)
                 instructions.append(.jumpIfZero(condition: rhs, target: falseLabel))
                 
                 // If both true
@@ -186,11 +285,11 @@ struct TACKYGenerator {
                 let endLabel = makeLabel(suffix: "_end")
                 
                 // Eval LHS
-                let lhs = generate(expression: lhsExp, into: &instructions)
+                let lhs = try generate(expression: lhsExp, into: &instructions)
                 instructions.append(.jumpIfNotZero(condition: lhs, target: trueLabel))
                 
                 // Eval RHS
-                let rhs = generate(expression: rhsExp, into: &instructions)
+                let rhs = try generate(expression: rhsExp, into: &instructions)
                 instructions.append(.jumpIfNotZero(condition: rhs, target: trueLabel))
                 
                 // If both false
@@ -206,8 +305,8 @@ struct TACKYGenerator {
                 
             default:
                 // Standard binary operators
-                let lhs = generate(expression: lhsExp, into: &instructions)
-                let rhs = generate(expression: rhsExp, into: &instructions)
+                let lhs = try generate(expression: lhsExp, into: &instructions)
+                let rhs = try generate(expression: rhsExp, into: &instructions)
                 let dest = makeTemporary()
 
                 let tackyOp: TackyBinaryOperator = switch op {
