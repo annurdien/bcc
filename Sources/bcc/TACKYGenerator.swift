@@ -36,9 +36,12 @@ struct TACKYGenerator {
     private var functionSignatures: [String: Int] = [:]
     
     private var variableMap: [String: String] = [:]
+    private var localStaticMap: [String: String] = [:]
     
     private var declaredVariables: Set<String> = []
     private var globalVariables: Set<String> = []
+    
+    private var collectedGlobals: [TackyGlobal] = []
 
     private mutating func makeTemporary() -> TackyValue {
         let tempName = "tmp.\(tempCounter)"
@@ -55,6 +58,9 @@ struct TACKYGenerator {
     // Rename user variable to unique TACKY variable to handle shadowing later
     // For now we just use the name directly
     private mutating func resolveVariable(name: String) throws -> TackyValue {
+        if let staticName = localStaticMap[name] {
+            return .global(staticName)
+        }
         if declaredVariables.contains(name) {
             return .variable(name)
         }
@@ -66,7 +72,7 @@ struct TACKYGenerator {
 
     mutating func generate(program: Program) throws -> TackyProgram {
         var tackyFunctions: [TackyFunction] = []
-        var tackyGlobals: [TackyGlobal] = []
+        collectedGlobals = []
         
         functionSignatures.removeAll()
         globalVariables.removeAll()
@@ -93,11 +99,11 @@ struct TACKYGenerator {
                 }
                 
                 globalVariables.insert(decl.name)
-                tackyGlobals.append(TackyGlobal(name: decl.name, initialValue: initVal))
+                collectedGlobals.append(TackyGlobal(name: decl.name, initialValue: initVal, isStatic: decl.isStatic))
             }
         }
         
-        return TackyProgram(globals: tackyGlobals, functions: tackyFunctions)
+        return TackyProgram(globals: collectedGlobals, functions: tackyFunctions)
     }
     
     private func evaluateConstant(_ expr: Expression, contextName: String) throws -> Int {
@@ -146,6 +152,7 @@ struct TACKYGenerator {
         
         // Reset state for new function
         variableMap.removeAll() 
+        localStaticMap.removeAll()
         declaredVariables.removeAll()
         
         // Add parameters to declared variables
@@ -166,13 +173,31 @@ struct TACKYGenerator {
         case .statement(let stmt):
             try generate(statement: stmt, into: &instructions)
         case .declaration(let decl):
-            if let initExpr = decl.initializer {
-                let initVal = try generate(expression: initExpr, into: &instructions)
-                instructions.append(.copy(src: initVal, dest: .variable(decl.name)))
+            if decl.isStatic {
+                // Static Local Variable
+                let uniqueName = "\(decl.name).\(labelCounter)_static" // e.g. x.0_static
+                _ = makeLabel() // Increment counter
+                
+                let initVal: Int?
+                if let expr = decl.initializer {
+                    initVal = try evaluateConstant(expr, contextName: decl.name)
+                } else {
+                    initVal = nil // Uninitialized static is 0 (BSS)
+                }
+                
+                collectedGlobals.append(TackyGlobal(name: uniqueName, initialValue: initVal, isStatic: true))
+                localStaticMap[decl.name] = uniqueName
+            
             } else {
-                // Uninitialized int.
+                // Regular Local Variable
+                declaredVariables.insert(decl.name)
+                if let initExpr = decl.initializer {
+                    let initVal = try generate(expression: initExpr, into: &instructions)
+                    instructions.append(.copy(src: initVal, dest: .variable(decl.name)))
+                } else {
+                    // Uninitialized int (undefined value on stack)
+                }
             }
-            declaredVariables.insert(decl.name)
         }
     }
 

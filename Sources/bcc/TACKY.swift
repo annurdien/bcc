@@ -23,12 +23,14 @@ struct TackyProgram: Equatable, CustomStringConvertible {
 struct TackyGlobal: Equatable, CustomStringConvertible {
     let name: String
     let initialValue: Int? // nil for uninitialized (BSS)
+    let isStatic: Bool
     
     var description: String {
+        let visibility = isStatic ? "Static" : "Global"
         if let val = initialValue {
-            return "Global(name: \(name), init: \(val))"
+            return "\(visibility)(name: \(name), init: \(val))"
         } else {
-            return "Global(name: \(name), uninit)"
+            return "\(visibility)(name: \(name), uninit)"
         }
     }
 }

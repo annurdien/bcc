@@ -213,6 +213,7 @@ struct Lexer {
         case "for": return .keywordFor
         case "break": return .keywordBreak
         case "continue": return .keywordContinue
+        case "static": return .keywordStatic
         default: return .identifier(identifierString)
         }
     }

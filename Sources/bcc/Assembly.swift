@@ -18,14 +18,16 @@ struct AsmProgram: Equatable, CustomStringConvertible {
 struct AsmGlobal: Equatable, CustomStringConvertible {
     let name: String
     let initialValue: Int? // nil = uninitialized
+    let isStatic: Bool
     let size: Int = 4
     let alignment: Int = 4
 
     var description: String {
+        let visibility = isStatic ? "Static" : "Global"
         if let val = initialValue {
-            return "Global(name: \(name), init: \(val))"
+            return "\(visibility)(name: \(name), init: \(val))"
         } else {
-            return "Global(name: \(name), uninit)"
+            return "\(visibility)(name: \(name), uninit)"
         }
     }
 }

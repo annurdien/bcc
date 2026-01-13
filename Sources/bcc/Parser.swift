@@ -291,8 +291,14 @@ struct Parser {
         }
     }
     
-    // declaration = "int" identifier [ "=" expression ] ";"
+    // declaration = ["static"] "int" identifier [ "=" expression ] ";"
     private mutating func parseDeclaration() throws -> Declaration {
+        var isStatic = false
+        if peek() == .keywordStatic {
+            advance()
+            isStatic = true
+        }
+        
         try consume(.keywordInt)
         
         guard case .identifier(let name) = peek() else {
@@ -307,11 +313,11 @@ struct Parser {
         }
         
         try consume(.semicolon)
-        return Declaration(name: name, initializer: initializer)
+        return Declaration(name: name, initializer: initializer, isStatic: isStatic)
     }
 
     private mutating func parseBlockItem() throws -> BlockItem {
-        if peek() == .keywordInt {
+        if peek() == .keywordInt || peek() == .keywordStatic {
             return .declaration(try parseDeclaration())
         } else {
             return .statement(try parseStatement())
@@ -319,6 +325,15 @@ struct Parser {
     }
 
     private mutating func parseFunction() throws -> FunctionDeclaration {
+        // [static] int name ( ...
+        if peek() == .keywordStatic {
+             advance()
+             // Warning: We update the Parser cursor, so we just consumed 'static'.
+             // Calling parseFunction implies we already decided it is a function.
+             // But FunctionDeclaration struct doesn't have isStatic yet. 
+             // We can ignore it for now (treat as global).
+        }
+    
         try consume(.keywordInt)
 
         let nameToken = peek()
@@ -376,18 +391,21 @@ struct Parser {
         
         while peek() != .eof {
             // Distinguish between function and variable declaration
-            // Both start with "int identifier"
-            // Function: int identifier ( ...
-            // Variable: int identifier = ... or int identifier ;
+            // [static] int identifier ...
             
-            // Safety check for lookahead
-            guard currentIndex + 2 < tokens.count else {
-                // Not enough tokens left, let parseDeclaration handle the error
-                items.append(.variable(try parseDeclaration()))
-                continue
+            var offset = 0
+            if peek() == .keywordStatic {
+                offset = 1
             }
             
-            let thirdToken = tokens[currentIndex + 2]
+            // Safety check for lookahead
+            if currentIndex + offset + 2 >= tokens.count {
+               // Not enough tokens, assume variable (parseDeclaration handles error)
+               items.append(.variable(try parseDeclaration()))
+               continue
+            }
+            
+            let thirdToken = tokens[currentIndex + offset + 2]
             
             if thirdToken == .openParen {
                 items.append(.function(try parseFunction()))

@@ -43,11 +43,15 @@ struct CodeEmitter {
         let name = global.name
         
         #if os(macOS)
-        output.append(".globl _\(name)\n")
+        if !global.isStatic {
+            output.append(".globl _\(name)\n")
+        }
         output.append(".p2align 2\n") // align 4
         output.append("_\(name):\n")
         #else
-        output.append(".globl \(name)\n")
+        if !global.isStatic {
+            output.append(".globl \(name)\n")
+        }
         output.append(".align 4\n")
         output.append("\(name):\n")
         #endif

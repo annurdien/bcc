@@ -6,7 +6,7 @@ struct AssemblyGenerator {
     func generate(program: TackyProgram) -> AsmProgram {
         // Convert globals
         let asmGlobals = program.globals.map { g in
-             AsmGlobal(name: g.name, initialValue: g.initialValue)
+             AsmGlobal(name: g.name, initialValue: g.initialValue, isStatic: g.isStatic)
         }
         
         // Iterate over all functions in the program

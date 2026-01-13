@@ -53,12 +53,14 @@ struct FunctionDeclaration: Equatable, CustomStringConvertible {
 struct Declaration: Equatable, CustomStringConvertible {
     let name: String
     let initializer: Expression?
+    let isStatic: Bool
 
     var description: String {
+        let storage = isStatic ? "Static " : ""
         if let initExpr = initializer {
-            return "Declare(name: \(name), init:\n\(indent(initExpr.description)))"
+            return "\(storage)Declare(name: \(name), init:\n\(indent(initExpr.description)))"
         } else {
-            return "Declare(name: \(name))"
+            return "\(storage)Declare(name: \(name))"
         }
     }
 }

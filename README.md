@@ -40,6 +40,9 @@
 - [x] Stage 9 - Global Variables
     - [x] Global Variable Declaration
     - [x] Global vs Local Scope (Shadowing)
+- [x] Stage 10 - Static Variables
+    - [x] Static Global Variables (Internal Linkage)
+    - [x] Static Local Variables (Persistence)
 
 
 
