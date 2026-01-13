@@ -84,6 +84,70 @@ struct AssemblyGenerator {
 
         for tackyInst in function.body {
             switch tackyInst {
+            case .load(let srcPtr, let dest):
+                let destOp = convert(dest)
+                let srcOp = convert(srcPtr)
+                let is64 = is64Bit(dest)
+                
+                // Load address into RAX
+                instructions.append(.movq(srcOp, .register(.rax)))
+                // Load value from (RAX) to dest
+                if is64 {
+                    if case .register(_) = destOp {
+                         instructions.append(.movq(.indirect(.rax), destOp))
+                    } else {
+                         // Mem to mem invalid. Load to RDX first.
+                         instructions.append(.movq(.indirect(.rax), .register(.rdx)))
+                         instructions.append(.movq(.register(.rdx), destOp))
+                    }
+                } else {
+                    if case .register(_) = destOp {
+                         instructions.append(.movl(.indirect(.rax), destOp))
+                    } else {
+                         instructions.append(.movl(.indirect(.rax), .register(.edx)))
+                         instructions.append(.movl(.register(.edx), destOp))
+                    }
+                }
+
+            case .store(let srcVal, let dstPtr):
+                let valOp = convert(srcVal)
+                let ptrOp = convert(dstPtr)
+                let is64 = is64Bit(srcVal)
+                
+                // Load address into RAX
+                instructions.append(.movq(ptrOp, .register(.rax)))
+                
+                // Move value to (RAX)
+                if is64 {
+                    if case .immediate(_) = valOp {
+                        instructions.append(.movq(valOp, .indirect(.rax)))
+                    } else if case .register(_) = valOp {
+                        instructions.append(.movq(valOp, .indirect(.rax)))
+                    } else {
+                        // Mem to mem. Load val to RDX.
+                        instructions.append(.movq(valOp, .register(.rdx)))
+                        instructions.append(.movq(.register(.rdx), .indirect(.rax)))
+                    }
+                } else {
+                    if case .immediate(_) = valOp {
+                        instructions.append(.movl(valOp, .indirect(.rax)))
+                    } else if case .register(_) = valOp {
+                        instructions.append(.movl(valOp, .indirect(.rax)))
+                    } else {
+                        instructions.append(.movl(valOp, .register(.edx)))
+                        instructions.append(.movl(.register(.edx), .indirect(.rax)))
+                    }
+                }
+
+            case .getAddress(let src, let dest):
+                let srcOp = convert(src)
+                let destOp = convert(dest)
+                
+                // Lea src -> RAX
+                instructions.append(.leaq(srcOp, .register(.rax)))
+                // Mov RAX -> dest
+                instructions.append(.movq(.register(.rax), destOp))
+
             case .return(let value):
                 if is64Bit(value) {
                     instructions.append(.movq(convert(value), .register(.rax)))
@@ -342,6 +406,7 @@ struct AssemblyGenerator {
             case .shrl(let src, let dest): newInstructions.append(.shrl(mapOperand(src), mapOperand(dest)))
             
             case .movq(let src, let dest): newInstructions.append(.movq(mapOperand(src), mapOperand(dest)))
+            case .leaq(let src, let dest): newInstructions.append(.leaq(mapOperand(src), mapOperand(dest)))
             case .addq(let src, let dest): newInstructions.append(.addq(mapOperand(src), mapOperand(dest)))
             case .subq(let src, let dest): newInstructions.append(.subq(mapOperand(src), mapOperand(dest)))
             case .imulq(let src, let dest): newInstructions.append(.imulq(mapOperand(src), mapOperand(dest)))

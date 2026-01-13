@@ -71,19 +71,19 @@ struct Parser {
                 advance()
                 let rhs = try parseExpression(minPrecedence: 1) 
                 
-                if case .variable(let name) = lhs {
-                    if let op = compoundOp {
-                        // Desugar x += y to x = x + y
-                        // lhs is .variable(name)
-                        let binaryRhs = Expression.binary(op, lhs, rhs)
-                        lhs = .assignment(name: name, expression: binaryRhs)
-                    } else {
-                        lhs = .assignment(name: name, expression: rhs)
-                    }
-                    continue
+                // Allow assignment to variables or dereferenced pointers (lvalues)
+                // We'll relax the check here and let later stages or a specific lvalue check handle validity if needed,
+                // but strictly speaking, in C, you can only assign to lvalues.
+                // For now, let's allow it and support the new AST structure.
+                
+                if let op = compoundOp {
+                    // Desugar x += y to x = x + y
+                    let binaryRhs = Expression.binary(op, lhs, rhs)
+                    lhs = .assignment(lhs: lhs, rhs: binaryRhs)
                 } else {
-                    throw ParserError.expectedExpression(found: token)
+                    lhs = .assignment(lhs: lhs, rhs: rhs)
                 }
+                continue
             }
             
             // Handle Ternary Operator (Right Associative, Precedence 3)
@@ -219,7 +219,7 @@ struct Parser {
             advance()
             let inner = try parseFactor()
             if case .variable(let name) = inner {
-                return .assignment(name: name, expression: .binary(.add, inner, .constant(1)))
+                return .assignment(lhs: inner, rhs: .binary(.add, inner, .constant(1)))
             } else {
                 throw ParserError.expectedExpression(found: token)
             }
@@ -228,7 +228,7 @@ struct Parser {
             advance()
             let inner = try parseFactor()
             if case .variable(let name) = inner {
-                return .assignment(name: name, expression: .binary(.subtract, inner, .constant(1)))
+                return .assignment(lhs: inner, rhs: .binary(.subtract, inner, .constant(1)))
             } else {
                 throw ParserError.expectedExpression(found: token)
             }
@@ -247,6 +247,16 @@ struct Parser {
             advance()
             let innerExp = try parseFactor()
             return .unary(.logicalNot, innerExp)
+
+        case .star:
+            advance()
+            let innerExp = try parseFactor()
+            return .unary(.dereference, innerExp)
+
+        case .ampersand:
+            advance()
+            let innerExp = try parseFactor()
+            return .unary(.addressOf, innerExp)
         
         default:
             throw ParserError.expectedExpression(found: token)
@@ -406,7 +416,12 @@ struct Parser {
             isStatic = true
         }
         
-        let type = try parseType()
+        var type = try parseType()
+        
+        while peek() == .star {
+            advance()
+            type = .pointer(type)
+        }
         
         guard case .identifier(let name) = peek() else {
             throw ParserError.expectedToken("identifier", found: peek())
@@ -437,7 +452,11 @@ struct Parser {
              advance()
         }
     
-        let returnType = try parseType()
+        var returnType = try parseType()
+        while peek() == .star {
+            advance()
+            returnType = .pointer(returnType)
+        }
 
         let nameToken = peek()
         guard case .identifier(let name) = nameToken else {
@@ -459,7 +478,11 @@ struct Parser {
                  }
             } else {
                  // Parse first parameter
-                 let type1 = try parseType()
+                 var type1 = try parseType()
+                 while peek() == .star {
+                     advance()
+                     type1 = .pointer(type1)
+                 }
                  
                  guard case .identifier(let paramName) = peek() else {
                      throw ParserError.expectedToken("identifier", found: peek())
@@ -470,7 +493,12 @@ struct Parser {
                  
                  while peek() == .comma {
                      advance()
-                     let typeN = try parseType()
+                     var typeN = try parseType()
+                     while peek() == .star {
+                         advance()
+                         typeN = .pointer(typeN)
+                     }
+                     
                      guard case .identifier(let paramNameN) = peek() else {
                          throw ParserError.expectedToken("identifier", found: peek())
                      }
@@ -498,39 +526,41 @@ struct Parser {
         
         while peek() != .eof {
             // Distinguish between function and variable declaration
-            // [static] [unsigned] [int/long] identifier ...
+            var lookaheadIndex = currentIndex
             
-            var offset = 0
-            if currentIndex + offset < tokens.count && tokens[currentIndex + offset] == .keywordStatic {
-                offset += 1
+            // Skip 'static'
+            if lookaheadIndex < tokens.count && tokens[lookaheadIndex] == .keywordStatic {
+                lookaheadIndex += 1
             }
             
-            // Check for unsigned
-            var typeTokenLength = 1
-             if currentIndex + offset < tokens.count && tokens[currentIndex + offset] == .keywordUnsigned {
-                // Could be 'unsigned int', 'unsigned long' or just 'unsigned'
-                if currentIndex + offset + 1 < tokens.count {
-                    let next = tokens[currentIndex + offset + 1]
-                    if next == .keywordInt || next == .keywordLong {
-                        typeTokenLength = 2
-                    }
+            // Skip type
+            if lookaheadIndex < tokens.count {
+                if tokens[lookaheadIndex] == .keywordInt || tokens[lookaheadIndex] == .keywordLong {
+                     lookaheadIndex += 1
+                } else if tokens[lookaheadIndex] == .keywordUnsigned {
+                     lookaheadIndex += 1
+                     if lookaheadIndex < tokens.count && (tokens[lookaheadIndex] == .keywordInt || tokens[lookaheadIndex] == .keywordLong) {
+                         lookaheadIndex += 1
+                     }
+                } else if tokens[lookaheadIndex] == .keywordVoid {
+                     lookaheadIndex += 1
                 }
             }
             
-            // Identifier is at currentIndex + offset + typeTokenLength - 1 ? No.
-            // If type is 1 token (int): Ident is at +1. (offset + 1)
-            // If type is 2 tokens (unsigned int): Ident is at +2. (offset + 2)
-            
-            let identifierIndex = currentIndex + offset + typeTokenLength
-            let expectedParenIndex = identifierIndex + 1
-            
-            // Safety check
-            if expectedParenIndex >= tokens.count {
-                 items.append(.variable(try parseDeclaration()))
-                 continue
+            // Skip pointers (*)
+            while lookaheadIndex < tokens.count && tokens[lookaheadIndex] == .star {
+                lookaheadIndex += 1
             }
             
-            if tokens[expectedParenIndex] == .openParen {
+            // Skip identifier
+            if lookaheadIndex < tokens.count {
+                if case .identifier = tokens[lookaheadIndex] {
+                     lookaheadIndex += 1
+                }
+            }
+            
+            // Check for '('
+            if lookaheadIndex < tokens.count && tokens[lookaheadIndex] == .openParen {
                 items.append(.function(try parseFunction()))
             } else {
                 items.append(.variable(try parseDeclaration()))

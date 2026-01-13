@@ -26,12 +26,21 @@ enum SemanticError: Error, CustomStringConvertible {
 }
 
 extension CType {
+    var size: Int {
+        switch self {
+        case .int, .unsignedInt: return 4
+        case .long, .unsignedLong: return 8
+        case .pointer: return 8
+        }
+    }
+
     var tackyType: TackyType {
         switch self {
         case .int: return .int
         case .long: return .long
         case .unsignedInt: return .uint
         case .unsignedLong: return .ulong
+        case .pointer: return .ulong // Pointers are 8 bytes (unsigned long)
         }
     }
 }
@@ -44,7 +53,7 @@ struct TACKYGenerator {
     private var loopStack: [(String, String)] = []
     
     // Map function name to argument count and return type
-    private var functionSignatures: [String: (Int, TackyType)] = [:]
+    private var functionSignatures: [String: (Int, CType)] = [:]
     
     private var variableMap: [String: String] = [:]
     private var localStaticMap: [String: String] = [:]
@@ -54,10 +63,10 @@ struct TACKYGenerator {
     
     private var collectedGlobals: [TackyGlobal] = []
     
-    private var currentVariableTypes: [String: TackyType] = [:]
-    private var globalTypes: [String: TackyType] = [:]
+    private var currentVariableTypes: [String: CType] = [:]
+    private var globalTypes: [String: CType] = [:]
 
-    private mutating func makeTemporary(type: TackyType = .int) -> TackyValue {
+    private mutating func makeTemporary(type: CType = .int) -> TackyValue {
         let tempName = "tmp.\(tempCounter)"
         tempCounter += 1
         currentVariableTypes[tempName] = type
@@ -83,12 +92,10 @@ struct TACKYGenerator {
         throw SemanticError.undeclaredVariable(name)
     }
     
-    private func getType(of value: TackyValue) -> TackyType {
+    private func getType(of value: TackyValue) -> CType {
         switch value {
         case .constant(let i):
-            // Simple heuristic to distinguish int vs long constants by value logic 
-            // Better logic relies on AST types, but TackyValue lossy.
-            if i > 2147483647 || i < -2147483648 {
+             if i > 2147483647 || i < -2147483648 {
                 return .long
             }
             return .int
@@ -113,7 +120,7 @@ struct TACKYGenerator {
                 if functionSignatures[function.name] != nil || globalVariables.contains(function.name) {
                      throw SemanticError.functionRedefinition(function.name)
                 }
-                functionSignatures[function.name] = (function.parameters.count, function.returnType.tackyType)
+                functionSignatures[function.name] = (function.parameters.count, function.returnType)
                 tackyFunctions.append(try generate(function: function))
                 
             case .variable(let decl):
@@ -128,10 +135,9 @@ struct TACKYGenerator {
                     initVal = nil
                 }
                 
-                let tType = decl.type.tackyType
                 globalVariables.insert(decl.name)
-                globalTypes[decl.name] = tType
-                collectedGlobals.append(TackyGlobal(name: decl.name, type: tType, initialValue: initVal, isStatic: decl.isStatic))
+                globalTypes[decl.name] = decl.type
+                collectedGlobals.append(TackyGlobal(name: decl.name, type: decl.type.tackyType, initialValue: initVal, isStatic: decl.isStatic))
             }
         }
         
@@ -148,7 +154,7 @@ struct TACKYGenerator {
             case .negate: return -val
             case .complement: return ~val
             case .logicalNot: return (val == 0) ? 1 : 0
-            case .postIncrement, .postDecrement: throw SemanticError.nonConstantInitializer(contextName)
+            case .postIncrement, .postDecrement, .addressOf, .dereference: throw SemanticError.nonConstantInitializer(contextName)
             }
         case .binary(let op, let lhs, let rhs):
             let lVal = try evaluateConstant(lhs, contextName: contextName)
@@ -198,14 +204,19 @@ struct TACKYGenerator {
             let paramName = function.parameters[i]
             let paramType = function.parameterTypes.indices.contains(i) ? function.parameterTypes[i] : .int
             declaredVariables.insert(paramName)
-            currentVariableTypes[paramName] = paramType.tackyType
+            currentVariableTypes[paramName] = paramType
         }
         
         try generate(statement: function.body, into: &instructions)
         
         instructions.append(.return(.constant(0)))
         
-        return TackyFunction(name: function.name, parameters: function.parameters, variableTypes: currentVariableTypes, body: instructions)
+        var tackyVarTypes: [String: TackyType] = [:]
+        for (k, v) in currentVariableTypes {
+            tackyVarTypes[k] = v.tackyType
+        }
+        
+        return TackyFunction(name: function.name, parameters: function.parameters, variableTypes: tackyVarTypes, body: instructions)
     }
 
     private mutating func generate(blockItem: BlockItem, into instructions: inout [TackyInstruction]) throws {
@@ -213,7 +224,7 @@ struct TACKYGenerator {
         case .statement(let stmt):
             try generate(statement: stmt, into: &instructions)
         case .declaration(let decl):
-            let tType = decl.type.tackyType
+            let type = decl.type
             if decl.isStatic {
                 let uniqueName = "\(decl.name).\(labelCounter)_static" // e.g. x.0_static
                 _ = makeLabel() 
@@ -225,13 +236,13 @@ struct TACKYGenerator {
                     initVal = nil 
                 }
                 
-                collectedGlobals.append(TackyGlobal(name: uniqueName, type: tType, initialValue: initVal, isStatic: true))
-                globalTypes[uniqueName] = tType
+                collectedGlobals.append(TackyGlobal(name: uniqueName, type: type.tackyType, initialValue: initVal, isStatic: true))
+                globalTypes[uniqueName] = type
                 localStaticMap[decl.name] = uniqueName
             
             } else {
                 declaredVariables.insert(decl.name)
-                currentVariableTypes[decl.name] = tType
+                currentVariableTypes[decl.name] = type
                 if let initExpr = decl.initializer {
                     let initVal = try generate(expression: initExpr, into: &instructions)
                     instructions.append(.copy(src: initVal, dest: .variable(decl.name)))
@@ -400,13 +411,41 @@ struct TACKYGenerator {
             instructions.append(.call(name: name, args: argValues, dest: dest))
             return dest
 
-        case .assignment(let name, let expr):
-            let val = try generate(expression: expr, into: &instructions)
-            let dest = try resolveVariable(name: name)
-            instructions.append(.copy(src: val, dest: dest))
-            return dest
+        case .assignment(let lhs, let rhs):
+            let rVal = try generate(expression: rhs, into: &instructions)
+            
+            if case .variable(let name) = lhs {
+                let dest = try resolveVariable(name: name)
+                instructions.append(.copy(src: rVal, dest: dest))
+                return dest
+            } else if case .unary(let op, let inner) = lhs, op == .dereference {
+                let ptr = try generate(expression: inner, into: &instructions)
+                instructions.append(.store(srcVal: rVal, dstPtr: ptr))
+                return rVal
+            }
+            fatalError("Invalid assignment lvalue")
 
         case .unary(let op, let innerExpression):
+            if op == .addressOf {
+                if case .variable(let name) = innerExpression {
+                    let varVal = try resolveVariable(name: name)
+                    let dest = makeTemporary(type: .pointer(.int))
+                    instructions.append(.getAddress(src: varVal, dest: dest))
+                    return dest
+                }
+                fatalError("AddressOf requires variable")
+            }
+            if op == .dereference {
+                let ptr = try generate(expression: innerExpression, into: &instructions)
+                let ptrType = getType(of: ptr)
+                guard case .pointer(let pointedType) = ptrType else {
+                     fatalError("Dereference requires pointer")
+                }
+                let dest = makeTemporary(type: pointedType)
+                instructions.append(.load(srcPtr: ptr, dest: dest))
+                return dest
+            }
+
             let sourceValue = try generate(expression: innerExpression, into: &instructions)
             let type = getType(of: sourceValue)
             var resultType = type
@@ -429,7 +468,7 @@ struct TACKYGenerator {
                 case .logicalNot: 
                     tackyOp = .logicalNot
                     resultType = .int
-                case .postIncrement, .postDecrement: fatalError("Handled above")
+                case .postIncrement, .postDecrement, .addressOf, .dereference: fatalError("Handled above")
             }
 
             let destValue = makeTemporary(type: resultType)
@@ -470,8 +509,64 @@ struct TACKYGenerator {
             let lhs = try generate(expression: lhsExp, into: &instructions)
             let rhs = try generate(expression: rhsExp, into: &instructions)
             
-            let lType = getType(of: lhs)
-            let rType = getType(of: rhs)
+            let lCType = getType(of: lhs)
+            let rCType = getType(of: rhs)
+            
+            // Pointer Arithmetic
+            if op == .add || op == .subtract {
+                var ptr: TackyValue? = nil
+                var idx: TackyValue? = nil
+                var pType: CType? = nil
+                
+                if case .pointer(let pt) = lCType {
+                     if case .pointer(let rpt) = rCType {
+                         // ptr - ptr
+                         if op == .subtract {
+                             let size = pt.size
+                             let dest = makeTemporary(type: .long) // ptrdiff_t
+                             // Sub pointers (ulong subtraction)
+                             instructions.append(.binary(op: .subtract, lhs: lhs, rhs: rhs, dest: dest))
+                             if size > 1 {
+                                 instructions.append(.binary(op: .divide, lhs: dest, rhs: .constant(size), dest: dest))
+                             }
+                             return dest
+                         }
+                         // ptr + ptr invalid
+                     } else {
+                         // ptr +/- int
+                         ptr = lhs; idx = rhs; pType = pt
+                     }
+                } else if case .pointer(let pt) = rCType {
+                     // int + ptr (commutative). int - ptr is invalid.
+                     if op == .add {
+                         ptr = rhs; idx = lhs; pType = pt
+                     }
+                }
+                
+                if let ptr = ptr, let idx = idx, let pType = pType {
+                    let size = pType.size
+                    var finalIdx = idx
+                    
+                    // Promote index to long (pointer width)
+                    // Note: Ideally should sign extend if int. Current Copy might zero extends.
+                    let promotedIdx = makeTemporary(type: .long)
+                    instructions.append(.copy(src: idx, dest: promotedIdx))
+                    finalIdx = promotedIdx
+                    
+                    if size > 1 {
+                        let scaledIdx = makeTemporary(type: .long)
+                        instructions.append(.binary(op: .multiply, lhs: finalIdx, rhs: .constant(size), dest: scaledIdx))
+                        finalIdx = scaledIdx
+                    }
+                    
+                    let dest = makeTemporary(type: .pointer(pType))
+                    instructions.append(.binary(op: op == .add ? .add : .subtract, lhs: ptr, rhs: finalIdx, dest: dest))
+                    return dest
+                }
+            }
+
+            let lType = lCType.tackyType
+            let rType = rCType.tackyType
             
             var finalL = lhs
             var finalR = rhs
@@ -496,7 +591,11 @@ struct TACKYGenerator {
                 if lType == .ulong || rType == .ulong {
                     commonType = .ulong
                 } else if lType == .long || rType == .long {
-                    commonType = .long
+                     if (lType == .uint || rType == .uint) {
+                         commonType = .long
+                     } else {
+                         commonType = .long
+                     }
                 } else if lType == .uint || rType == .uint {
                     commonType = .uint
                 } else {
@@ -505,13 +604,22 @@ struct TACKYGenerator {
                 
                 resultType = commonType
                 
+                func toCType(_ t: TackyType) -> CType {
+                    switch t {
+                    case .int: return .int
+                    case .long: return .long
+                    case .uint: return .unsignedInt
+                    case .ulong: return .unsignedLong
+                    }
+                }
+
                 if lType != commonType {
-                    let tmp = makeTemporary(type: commonType)
+                    let tmp = makeTemporary(type: toCType(commonType))
                     instructions.append(.copy(src: lhs, dest: tmp))
                     finalL = tmp
                 }
                 if rType != commonType {
-                    let tmp = makeTemporary(type: commonType)
+                    let tmp = makeTemporary(type: toCType(commonType))
                     instructions.append(.copy(src: rhs, dest: tmp))
                     finalR = tmp
                 }
@@ -532,12 +640,23 @@ struct TACKYGenerator {
                     case .lessThanOrEqual: tackyOp = isUnsignedOp ? .lessThanOrEqualU : .lessThanOrEqual; isComparison = true
                     case .greaterThan: tackyOp = isUnsignedOp ? .greaterThanU : .greaterThan; isComparison = true
                     case .greaterThanOrEqual: tackyOp = isUnsignedOp ? .greaterThanOrEqualU : .greaterThanOrEqual; isComparison = true
-                    default: fatalError("Unreach")
+                    default: fatalError("Shift handled above")
                 }
             }
 
-            // Comparison always results in int
-            let dest = makeTemporary(type: isComparison ? .int : resultType)
+            let cResultType: CType
+            if isComparison {
+                cResultType = .int
+            } else {
+                 switch resultType {
+                    case .int: cResultType = .int
+                    case .long: cResultType = .long
+                    case .uint: cResultType = .unsignedInt
+                    case .ulong: cResultType = .unsignedLong
+                }
+            }
+            
+            let dest = makeTemporary(type: cResultType)
             instructions.append(.binary(op: tackyOp, lhs: finalL, rhs: finalR, dest: dest))
             return dest
         }

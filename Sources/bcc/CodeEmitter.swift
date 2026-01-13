@@ -96,6 +96,8 @@ struct CodeEmitter {
             return "  popq \(emit(operand: op, size: .q))\n"
         case .movq(let src, let dest):
             return "  movq \(emit(operand: src, size: .q)), \(emit(operand: dest, size: .q))\n"
+        case .leaq(let src, let dest):
+            return "  leaq \(emit(operand: src, size: .q)), \(emit(operand: dest, size: .q))\n"
         case .addq(let src, let dest):
             return "  addq \(emit(operand: src, size: .q)), \(emit(operand: dest, size: .q))\n"
         case .subq(let src, let dest):
@@ -268,17 +270,14 @@ struct CodeEmitter {
                 case .l: return "%r9d"
                 case .b: return "%r9b"
                 }
-            case .r10d:
-                 switch size {
-                case .q: return "%r10"
-                case .l: return "%r10d"
-                case .b: return "%r10b"
-                }
             }
             
         case .stackOffset(let offset):
             return "\(offset)(%rbp)"
             
+        case .indirect(let reg):
+             return "(\(emit(operand: .register(reg), size: .q)))"
+
         case .pseudoregister(let name):
             // This should not happen by the time we emit
             return "%\(name)_ERROR"

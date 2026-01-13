@@ -74,6 +74,7 @@ enum AsmOperand: Equatable, CustomStringConvertible {
     case pseudoregister(String)
     case stackOffset(Int)
     case dataLabel(String)
+    case indirect(AsmRegister)
 
     var description: String {
         switch self {
@@ -86,7 +87,9 @@ enum AsmOperand: Equatable, CustomStringConvertible {
         case .stackOffset(let offset):
             return "\(offset)(%rbp)"
         case .dataLabel(let name):
-             return "\(name)(%rip)" // RIP-relative addressing for MacOS/Linux typically
+             return "\(name)(%rip)"
+        case .indirect(let reg):
+             return "(\(reg.description))"
         }
     }
 }
@@ -96,6 +99,7 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
     case pushq(AsmOperand)
     case popq(AsmOperand)
     case movq(AsmOperand, AsmOperand) // 64-bit move
+    case leaq(AsmOperand, AsmOperand) // Load effective address
     case addq(AsmOperand, AsmOperand) // 64-bit add
     case subq(AsmOperand, AsmOperand) // 64-bit subtract
     case imulq(AsmOperand, AsmOperand)
@@ -154,6 +158,8 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
             return "popq \(op.description)"
         case .movq(let src, let dest):
             return "movq \(src.description), \(dest.description)"
+        case .leaq(let src, let dest):
+            return "leaq \(src.description), \(dest.description)"
         case .addq(let src, let dest):
             return "addq \(src.description), \(dest.description)"
         case .subq(let src, let dest):

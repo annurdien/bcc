@@ -7,6 +7,7 @@ enum CType: Equatable, CustomStringConvertible {
     case long
     case unsignedInt
     case unsignedLong
+    indirect case pointer(CType)
     
     var description: String {
         switch self {
@@ -14,6 +15,7 @@ enum CType: Equatable, CustomStringConvertible {
         case .long: return "long"
         case .unsignedInt: return "unsigned int"
         case .unsignedLong: return "unsigned long"
+        case .pointer(let t): return "\(t.description) *"
         }
     }
 }
@@ -165,6 +167,8 @@ enum UnaryOperator: Equatable, CustomStringConvertible {
     case logicalNot
     case postIncrement
     case postDecrement
+    case addressOf
+    case dereference
 
     var description: String {
         switch self {
@@ -173,6 +177,8 @@ enum UnaryOperator: Equatable, CustomStringConvertible {
         case .logicalNot: return "LogicalNot"
         case .postIncrement: return "PostIncrement"
         case .postDecrement: return "PostDecrement"
+        case .addressOf: return "AddressOf"
+        case .dereference: return "Dereference"
         }
     }
 }
@@ -226,7 +232,7 @@ indirect enum Expression: Equatable, CustomStringConvertible {
     case unary(UnaryOperator, Expression)
     case binary(BinaryOperator, Expression, Expression)
     case variable(String)
-    case assignment(name: String, expression: Expression)
+    case assignment(lhs: Expression, rhs: Expression)
     case conditional(condition: Expression, thenExpr: Expression, elseExpr: Expression)
     case functionCall(name: String, arguments: [Expression])
 
@@ -245,8 +251,8 @@ indirect enum Expression: Equatable, CustomStringConvertible {
             return "Binary(\n\(indent(opLine))\n\(indent(lhsLine))\n\(indent(rhsLine))\n)"
         case .variable(let name):
             return "Var(\(name))"
-        case .assignment(let name, let exp):
-             return "Assign(name: \(name), val:\n\(indent(exp.description)))"
+        case .assignment(let lhs, let rhs):
+             return "Assign(lhs: \(lhs.description), rhs:\n\(indent(rhs.description)))"
         case .conditional(let cond, let thenExpr, let elseExpr):
             return "Conditional(\n\(indent(cond.description)) ?\n\(indent(thenExpr.description)) :\n\(indent(elseExpr.description))\n)"
         case .functionCall(let name, let args):

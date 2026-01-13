@@ -164,6 +164,9 @@ enum TackyInstruction: Equatable, CustomStringConvertible {
     case jumpIfNotZero(condition: TackyValue, target: String)
     case label(String)
     case call(name: String, args: [TackyValue], dest: TackyValue)
+    case load(srcPtr: TackyValue, dest: TackyValue)
+    case store(srcVal: TackyValue, dstPtr: TackyValue)
+    case getAddress(src: TackyValue, dest: TackyValue)
 
     var description: String {
         switch self {
@@ -186,6 +189,12 @@ enum TackyInstruction: Equatable, CustomStringConvertible {
         case .call(let name, let args, let dest):
             let argsDesc = args.map { $0.description }.joined(separator: ", ")
             return "\(dest.description) = Call \(name)(\(argsDesc))"
+        case .load(let srcPtr, let dest):
+            return "\(dest.description) = Load [\(srcPtr.description)]"
+        case .store(let srcVal, let dstPtr):
+            return "Store \(srcVal.description) -> [\(dstPtr.description)]"
+        case .getAddress(let src, let dest):
+            return "\(dest.description) = AddressOf \(src.description)"
         }
     }
 }

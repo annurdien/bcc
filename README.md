@@ -63,6 +63,12 @@
     - [x] Post-increment (`x++`)
     - [x] Pre-decrement (`--x`)
     - [x] Post-decrement (`x--`)
+- [x] Stage 16 - Pointers
+    - [x] Pointer Declaration (`int *p`)
+    - [x] Address-Of Operator (`&x`)
+    - [x] Dereference Operator (`*p`)
+    - [x] Pointer Arithmetic (Basic)
+
 
 
 
