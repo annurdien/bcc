@@ -112,12 +112,24 @@ struct Lexer {
             return .questionMark
         case "+":
             advance()
+            if peek() == "=" {
+               advance()
+               return .plusEqual
+            }
             return .plus
         case "*":
             advance()
+            if peek() == "=" {
+                advance()
+                return .starEqual
+            }
             return .star
         case "/":
             advance()
+            if peek() == "=" {
+                advance()
+                return .slashEqual
+            }
             if peek() == "/" {
                 // Single-line comment: consume until newline
                 while let char = peek(), char != "\n" {
@@ -137,12 +149,19 @@ struct Lexer {
             return .slash
         case "%":
             advance()
+            if peek() == "=" {
+                advance()
+                return .percentEqual
+            }
             return .percent
         case "&":
             advance()
             if peek() == "&" {
                 advance()
                 return .ampersandAmpersand
+            } else if peek() == "=" {
+                advance()
+                return .ampersandEqual
             }
             return .ampersand
         case "|":
@@ -150,10 +169,17 @@ struct Lexer {
             if peek() == "|" {
                 advance()
                 return .pipePipe
+            } else if peek() == "=" {
+                advance()
+                return .pipeEqual
             }
             return .pipe
         case "^":
             advance()
+            if peek() == "=" {
+                advance()
+                return .caretEqual
+            }
             return .caret
         case "=":
             advance()
@@ -169,6 +195,10 @@ struct Lexer {
                 return .lessThanEqual
             } else if peek() == "<" {
                 advance()
+                if peek() == "=" {
+                    advance()
+                    return .lessThanLessThanEqual
+                }
                 return .lessThanLessThan
             }
             return .lessThan
@@ -179,18 +209,23 @@ struct Lexer {
                 return .greaterThanEqual
             } else if peek() == ">" {
                 advance()
+                if peek() == "=" {
+                    advance()
+                    return .greaterThanGreaterThanEqual
+                }
                 return .greaterThanGreaterThan
             }
             return .greaterThan
         case "-":
             advance()
-
-            if let nextChar = peek(), nextChar == "-" {
+            if peek() == "=" {
+                advance()
+                return .minusEqual
+            } else if peek() == "-" {
                 advance()
                 return .minusMinus
-            } else {
-                return .minus
             }
+            return .minus
 
         default:
             if char.isLetter || char == "_" {

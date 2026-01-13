@@ -45,6 +45,16 @@ enum Token: Equatable {
     case greaterThanGreaterThan
     case greaterThanEqual
     case equal // = Assignment
+    case plusEqual // +=
+    case minusEqual // -=
+    case starEqual // *=
+    case slashEqual // /=
+    case percentEqual // %=
+    case ampersandEqual // &=
+    case pipeEqual // |=
+    case caretEqual // ^=
+    case lessThanLessThanEqual // <<=
+    case greaterThanGreaterThanEqual // >>=
 
     // One or two character tokens
     case minus

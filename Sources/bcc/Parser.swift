@@ -61,13 +61,25 @@ struct Parser {
             let token = peek()
             
             // Handle Assignment specially (Right Associative, Precedence 1)
-            if token == .equal {
+            // Includes Compound Assignments
+            if token == .equal || getCompoundAssignmentOperator(token) != nil {
                 if 1 < minPrecedence { break }
+                
+                let isCompound = (token != .equal)
+                let compoundOp = isCompound ? getCompoundAssignmentOperator(token) : nil
+                
                 advance()
                 let rhs = try parseExpression(minPrecedence: 1) 
                 
                 if case .variable(let name) = lhs {
-                    lhs = .assignment(name: name, expression: rhs)
+                    if let op = compoundOp {
+                        // Desugar x += y to x = x + y
+                        // lhs is .variable(name)
+                        let binaryRhs = Expression.binary(op, lhs, rhs)
+                        lhs = .assignment(name: name, expression: binaryRhs)
+                    } else {
+                        lhs = .assignment(name: name, expression: rhs)
+                    }
                     continue
                 } else {
                     throw ParserError.expectedExpression(found: token)
@@ -151,6 +163,22 @@ struct Parser {
         case .pipe: return .bitwiseOr
         case .ampersandAmpersand: return .logicalAnd
         case .pipePipe: return .logicalOr
+        default: return nil
+        }
+    }
+    
+    private func getCompoundAssignmentOperator(_ token: Token) -> BinaryOperator? {
+        switch token {
+        case .plusEqual: return .add
+        case .minusEqual: return .subtract
+        case .starEqual: return .multiply
+        case .slashEqual: return .divide
+        case .percentEqual: return .remainder
+        case .ampersandEqual: return .bitwiseAnd
+        case .pipeEqual: return .bitwiseOr
+        case .caretEqual: return .bitwiseXor
+        case .lessThanLessThanEqual: return .shiftLeft
+        case .greaterThanGreaterThanEqual: return .shiftRight
         default: return nil
         }
     }

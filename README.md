@@ -55,6 +55,10 @@
     - [x] XOR (`^`)
     - [x] Shift Left (`<<`)
     - [x] Shift Right (`>>`)
+- [x] Stage 14 - Compound Assignment
+    - [x] Arithmetic Compound (`+=`, `-=`, `*=`, `/=`, `%=`)
+    - [x] Bitwise Compound (`&=`, `|=`, `^=`, `<<=`, `>>=`)
+
 
 
 
