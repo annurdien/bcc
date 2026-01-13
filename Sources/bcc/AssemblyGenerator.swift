@@ -67,22 +67,25 @@ struct AssemblyGenerator {
             case .variable(let name):
                 return function.variableTypes[name] ?? .int
             case .global(let name):
-                return .int // Global look up not avail here easily? Assuming int is unsafe.
-                // But generally global access is via pointer or direct label reference.
-                // We should pass globalTypes potentially. 
-                // For now, assume Tacky generator verified types match.
-                // If we do `movq global, dest(long)` -> emitted as movq name(%rip), %reg
+                // We should track global types but for now we rely on destination to infer copy size
+                return .int 
             }
         }
 
-        func isLong(_ val: TackyValue) -> Bool {
-            return getType(val) == .long
+        func is64Bit(_ val: TackyValue) -> Bool {
+            let t = getType(val)
+            return t == .long || t == .ulong
+        }
+        
+        func isUnsigned(_ val: TackyValue) -> Bool {
+            let t = getType(val)
+            return t == .uint || t == .ulong
         }
 
         for tackyInst in function.body {
             switch tackyInst {
             case .return(let value):
-                if isLong(value) {
+                if is64Bit(value) {
                     instructions.append(.movq(convert(value), .register(.rax)))
                 } else {
                     instructions.append(.movl(convert(value), .register(.eax)))
@@ -92,10 +95,10 @@ struct AssemblyGenerator {
             case .unary(let op, let src, let dest):
                 let destOp = convert(dest)
                 let srcOp = convert(src)
-                let longOp = isLong(dest) // Operation width determined by destination usually
+                let is64 = is64Bit(dest)
                 
                 // Copy src to dest first
-                if longOp {
+                if is64 {
                      instructions.append(.movq(srcOp, destOp))
                 } else {
                      instructions.append(.movl(srcOp, destOp))
@@ -103,14 +106,14 @@ struct AssemblyGenerator {
                 
                 switch op {
                 case .negate:
-                    if longOp { instructions.append(.negq(destOp)) } else { instructions.append(.negl(destOp)) }
+                    if is64 { instructions.append(.negq(destOp)) } else { instructions.append(.negl(destOp)) }
                 case .complement:
-                    if longOp { instructions.append(.notq(destOp)) } else { instructions.append(.notl(destOp)) }
+                    if is64 { instructions.append(.notq(destOp)) } else { instructions.append(.notl(destOp)) }
                 case .logicalNot:
                     // Result is always int (0/1). Src might be long.
                     // If src is long, cmpq $0, src.
-                    let srcLong = isLong(src)
-                    if srcLong {
+                    let srcIs64 = is64Bit(src)
+                    if srcIs64 {
                         instructions.append(.cmpq(.immediate(0), srcOp))
                     } else {
                         instructions.append(.cmpl(.immediate(0), srcOp))
@@ -123,15 +126,15 @@ struct AssemblyGenerator {
                 let destOp = convert(dest)
                 let lhsOp = convert(lhs)
                 let rhsOp = convert(rhs)
-                let longOp = isLong(dest)
+                
                 // For comparisons, operation width matches operands (lhs/rhs), but dest is int (byte setz).
                 
-                let isComp = (op == .equal || op == .notEqual || op == .lessThan || op == .lessThanOrEqual || op == .greaterThan || op == .greaterThanOrEqual)
+                let isComp = (op == .equal || op == .notEqual || op == .lessThan || op == .lessThanOrEqual || op == .greaterThan || op == .greaterThanOrEqual || op == .lessThanU || op == .lessThanOrEqualU || op == .greaterThanU || op == .greaterThanOrEqualU)
                 
                 if isComp {
                     // Cmp width depends on operands
-                    let opLong = isLong(lhs) // Assume lhs/rhs match promoted type
-                    if opLong {
+                    let is64 = is64Bit(lhs) // Assume lhs/rhs match promoted type
+                    if is64 {
                         instructions.append(.cmpq(rhsOp, lhsOp))
                     } else {
                         instructions.append(.cmpl(rhsOp, lhsOp))
@@ -144,11 +147,16 @@ struct AssemblyGenerator {
                         case .lessThanOrEqual: instructions.append(.setle(destOp))
                         case .greaterThan: instructions.append(.setg(destOp))
                         case .greaterThanOrEqual: instructions.append(.setge(destOp))
+                        case .lessThanU: instructions.append(.setb(destOp))
+                        case .lessThanOrEqualU: instructions.append(.setbe(destOp))
+                        case .greaterThanU: instructions.append(.seta(destOp))
+                        case .greaterThanOrEqualU: instructions.append(.setae(destOp))
                         default: break
                     }
                 } else {
                     // Arithmetic
-                    if longOp {
+                    let is64 = is64Bit(dest)
+                    if is64 {
                         instructions.append(.movq(lhsOp, destOp))
                         switch op {
                         case .add: instructions.append(.addq(rhsOp, destOp))
@@ -159,6 +167,11 @@ struct AssemblyGenerator {
                             instructions.append(.cqo) // Sign extend RAX -> RDX:RAX
                             instructions.append(.idivq(rhsOp))
                             instructions.append(.movq(.register(.rax), destOp))
+                        case .divideU:
+                            instructions.append(.movq(lhsOp, .register(.rax)))
+                            instructions.append(.movq(.immediate(0), .register(.rdx))) // Zero RDX
+                             instructions.append(.divq(rhsOp))
+                             instructions.append(.movq(.register(.rax), destOp))
                         default: break
                         }
                     } else {
@@ -172,28 +185,22 @@ struct AssemblyGenerator {
                             instructions.append(.cdq) 
                             instructions.append(.idivl(rhsOp))
                             instructions.append(.movl(.register(.eax), destOp))
+                        case .divideU:
+                            instructions.append(.movl(lhsOp, .register(.eax)))
+                            instructions.append(.movl(.immediate(0), .register(.rdx))) // Zero EDX (Wait, Divl uses Edx:Eax)
+                            instructions.append(.divl(rhsOp))
+                            instructions.append(.movl(.register(.eax), destOp))
                         default: break
                         }
                     }
                 }
                 
             case .copy(let src, let dest):
-                // Truncation or Extension specific moves could be useful?
-                // movslq (sign extend int to long)
-                // We use standard movs. CodeEmitter will just emit movq/movl based on instruction?
-                let destLong = isLong(dest)
-                // let srcLong = isLong(src) // Not used yet
+                let destIs64 = is64Bit(dest)
                 
-                if destLong {
-                     // If src is int, we ideally want movslq. 
-                     // But we only have movq. `movq intReg, longReg` is invalid?
-                     // Actually `movsxd` is needed.
-                     // But let's assume TackyGenerator handles explicit temporary copies/casts if we add them. 
-                     // Or just use movq. System V ABI: movq from 32-bit reg zero-extends.
-                     // C expects sign extension!
-                     // Since we don't have movslq instruction in our Assembly.swift, we might fail negative numbers.
-                     // TODO: Add `movslq`. For now use `movq` and hope? No, bad for negative.
-                     // But `replacePseudoregisters` maps stack slots.
+                if destIs64 {
+                     // Potential upgrade: check if src is 32-bit and explicit sign/zero extend.
+                     // Currently we rely on movq (which may be buggy if src is 32-bit mem)
                      instructions.append(.movq(convert(src), convert(dest))) 
                 } else {
                      instructions.append(.movl(convert(src), convert(dest)))
@@ -202,12 +209,12 @@ struct AssemblyGenerator {
             case .jump(let target):
                 instructions.append(.jmp(target))
             case .jumpIfZero(let cond, let target):
-                let isL = isLong(cond)
+                let isL = is64Bit(cond)
                 if isL { instructions.append(.cmpq(.immediate(0), convert(cond))) }
                 else { instructions.append(.cmpl(.immediate(0), convert(cond))) }
                 instructions.append(.je(target))
             case .jumpIfNotZero(let cond, let target):
-                let isL = isLong(cond)
+                let isL = is64Bit(cond)
                 if isL { instructions.append(.cmpq(.immediate(0), convert(cond))) }
                 else { instructions.append(.cmpl(.immediate(0), convert(cond))) }
                 instructions.append(.jne(target))
@@ -220,7 +227,7 @@ struct AssemblyGenerator {
                  if stackPadding > 0 { instructions.append(.subq(.immediate(stackPadding), .register(.rsp))) }
                  for arg in stackArgs.reversed() {
                      let op = convert(arg)
-                     if isLong(arg) {
+                     if is64Bit(arg) {
                          instructions.append(.movq(op, .register(.rax)))
                          instructions.append(.pushq(.register(.rax)))
                      } else {
@@ -230,14 +237,14 @@ struct AssemblyGenerator {
                  }
                  for (i, arg) in regArgs.enumerated() {
                      let reg = argumentRegisters[i]
-                     if isLong(arg) { instructions.append(.movq(convert(arg), .register(reg))) }
+                     if is64Bit(arg) { instructions.append(.movq(convert(arg), .register(reg))) }
                      else { instructions.append(.movl(convert(arg), .register(reg))) }
                  }
                  instructions.append(.call(name))
                  let bytesPopped = (stackArgs.count * 8) + stackPadding
                  if bytesPopped > 0 { instructions.append(.addq(.immediate(bytesPopped), .register(.rsp))) }
                  
-                 if isLong(dest) { instructions.append(.movq(.register(.rax), convert(dest))) }
+                 if is64Bit(dest) { instructions.append(.movq(.register(.rax), convert(dest))) }
                  else { instructions.append(.movl(.register(.eax), convert(dest))) }
             }
         }
@@ -281,6 +288,7 @@ struct AssemblyGenerator {
             case .subl(let src, let dest): newInstructions.append(.subl(mapOperand(src), mapOperand(dest)))
             case .imull(let src, let dest): newInstructions.append(.imull(mapOperand(src), mapOperand(dest)))
             case .idivl(let op): newInstructions.append(.idivl(mapOperand(op)))
+            case .divl(let op): newInstructions.append(.divl(mapOperand(op)))
             case .cmpl(let src, let dest): newInstructions.append(.cmpl(mapOperand(src), mapOperand(dest)))
             
             case .movq(let src, let dest): newInstructions.append(.movq(mapOperand(src), mapOperand(dest)))
@@ -288,6 +296,7 @@ struct AssemblyGenerator {
             case .subq(let src, let dest): newInstructions.append(.subq(mapOperand(src), mapOperand(dest)))
             case .imulq(let src, let dest): newInstructions.append(.imulq(mapOperand(src), mapOperand(dest)))
             case .idivq(let op): newInstructions.append(.idivq(mapOperand(op)))
+            case .divq(let op): newInstructions.append(.divq(mapOperand(op)))
             case .negq(let op): newInstructions.append(.negq(mapOperand(op)))
             case .notq(let op): newInstructions.append(.notq(mapOperand(op)))
             case .cmpq(let src, let dest): newInstructions.append(.cmpq(mapOperand(src), mapOperand(dest)))
@@ -298,6 +307,10 @@ struct AssemblyGenerator {
             case .setle(let op): newInstructions.append(.setle(mapOperand(op)))
             case .setg(let op): newInstructions.append(.setg(mapOperand(op)))
             case .setge(let op): newInstructions.append(.setge(mapOperand(op)))
+            case .setb(let op): newInstructions.append(.setb(mapOperand(op)))
+            case .setbe(let op): newInstructions.append(.setbe(mapOperand(op)))
+            case .seta(let op): newInstructions.append(.seta(mapOperand(op)))
+            case .setae(let op): newInstructions.append(.setae(mapOperand(op)))
             case .pushq(let op): newInstructions.append(.pushq(mapOperand(op)))
             case .popq(let op): newInstructions.append(.popq(mapOperand(op)))
             default: newInstructions.append(inst)
@@ -368,6 +381,11 @@ struct AssemblyGenerator {
                     finalInstructions.append(.movl(op, .register(.r10d)))
                     finalInstructions.append(.idivl(.register(.r10d)))
                 } else { finalInstructions.append(inst) }
+            case .divl(let op):
+                 if case .immediate = op {
+                    finalInstructions.append(.movl(op, .register(.r10d)))
+                    finalInstructions.append(.divl(.register(.r10d)))
+                } else { finalInstructions.append(inst) }
 
             // 64-bit
             case .movq(let src, let dest):
@@ -409,6 +427,11 @@ struct AssemblyGenerator {
                  if case .immediate = op {
                     finalInstructions.append(.movq(op, .register(.r10)))
                     finalInstructions.append(.idivq(.register(.r10)))
+                } else { finalInstructions.append(inst) }
+            case .divq(let op):
+                 if case .immediate = op {
+                    finalInstructions.append(.movq(op, .register(.r10)))
+                    finalInstructions.append(.divq(.register(.r10)))
                 } else { finalInstructions.append(inst) }
 
             default:

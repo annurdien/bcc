@@ -14,6 +14,7 @@ enum Token: Equatable {
     case keywordBreak
     case keywordContinue
     case keywordStatic
+    case keywordUnsigned
 
     // Single character tokens
     case openParen

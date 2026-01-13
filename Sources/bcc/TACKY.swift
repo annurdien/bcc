@@ -7,11 +7,13 @@ private func indent(_ s: String) -> String {
 enum TackyType: Equatable, CustomStringConvertible {
     case int
     case long
+    case uint
+    case ulong
     
     var size: Int {
         switch self {
-        case .int: return 4
-        case .long: return 8
+        case .int, .uint: return 4
+        case .long, .ulong: return 8
         }
     }
     
@@ -19,6 +21,8 @@ enum TackyType: Equatable, CustomStringConvertible {
         switch self {
         case .int: return "Int"
         case .long: return "Long"
+        case .uint: return "UInt"
+        case .ulong: return "ULong"
         }
     }
 }
@@ -101,12 +105,19 @@ enum TackyBinaryOperator: Equatable, CustomStringConvertible {
     case subtract
     case multiply
     case divide
+    case divideU
+    case remainder
+    case remainderU
     case equal
     case notEqual
     case lessThan
+    case lessThanU
     case lessThanOrEqual
+    case lessThanOrEqualU
     case greaterThan
+    case greaterThanU
     case greaterThanOrEqual
+    case greaterThanOrEqualU
     
     var description: String {
         switch self {
@@ -114,12 +125,19 @@ enum TackyBinaryOperator: Equatable, CustomStringConvertible {
         case .subtract: return "Subtract"
         case .multiply: return "Multiply"
         case .divide: return "Divide"
+        case .divideU: return "DivideU"
+        case .remainder: return "Remainder"
+        case .remainderU: return "RemainderU"
         case .equal: return "Equal"
         case .notEqual: return "NotEqual"
         case .lessThan: return "LessThan"
+        case .lessThanU: return "LessThanU"
         case .lessThanOrEqual: return "LessThanOrEqual"
+        case .lessThanOrEqualU: return "LessThanOrEqualU"
         case .greaterThan: return "GreaterThan"
+        case .greaterThanU: return "GreaterThanU"
         case .greaterThanOrEqual: return "GreaterThanOrEqual"
+        case .greaterThanOrEqualU: return "GreaterThanOrEqualU"
         }
     }
 }

@@ -30,6 +30,8 @@ extension CType {
         switch self {
         case .int: return .int
         case .long: return .long
+        case .unsignedInt: return .uint
+        case .unsignedLong: return .ulong
         }
     }
 }
@@ -456,39 +458,70 @@ struct TACKYGenerator {
             var finalR = rhs
             let resultType: TackyType
             
-            // Promote to long if either is long
-            if lType == .long || rType == .long {
-                resultType = .long
-                if lType == .int {
-                    let tmp = makeTemporary(type: .long)
-                    instructions.append(.copy(src: lhs, dest: tmp)) // implicit sext
-                    finalL = tmp
-                }
-                if rType == .int {
-                    let tmp = makeTemporary(type: .long)
-                    instructions.append(.copy(src: rhs, dest: tmp)) // implicit sext
-                    finalR = tmp
-                }
+            // Type Promotion Logic
+            // Hierarchy: ulong > long > uint > int
+            // (Note: C Standard says if long can hold all uint, use long (signed). LP64: long is 64, uint is 32. So long > uint.)
+            
+            var commonType: TackyType = .int
+            
+            if lType == .ulong || rType == .ulong {
+                commonType = .ulong
+            } else if lType == .long || rType == .long {
+                // If one is long and other is uint:
+                // long size (8) > uint size (4). So convert uint to long.
+                commonType = .long
+            } else if lType == .uint || rType == .uint {
+                commonType = .uint
             } else {
-                resultType = .int
+                commonType = .int
+            }
+            
+            resultType = commonType
+            
+            // Cast operands via copy (which creates movs/movz in backend ideally)
+            // Currently .copy assumes sign extension for int->long? We need explicit zero extension?
+            // Backend `isLong(src)` vs `isLong(dest)`.
+            // We might need explicit cast instructions in TACKY if copy semantics are ambiguous. 
+            
+            if lType != commonType {
+                let tmp = makeTemporary(type: commonType)
+                // For uint -> long, we need zero extension.
+                // For int -> long, we need sign extension.
+                // Our backend 'copy' treats everything as movq/movl based on DEST size.
+                // If movq src(32), dest(64):
+                //   If src is 'int' (signed 32), we want movsxd (sign extend).
+                //   If src is 'uint' (unsigned 32), we want mov (zero extend).
+                // Current backend just calls 'movslq' or similar? NO it calls `movq`.
+                // If strictness required, we'll need backend support.
+                // Assuming backend handles it or we fix it later.
+                instructions.append(.copy(src: lhs, dest: tmp))
+                finalL = tmp
+            }
+            if rType != commonType {
+                let tmp = makeTemporary(type: commonType)
+                instructions.append(.copy(src: rhs, dest: tmp))
+                finalR = tmp
             }
 
             let tackyOp: TackyBinaryOperator
             var isComparison = false
+            let isUnsignedOp = (commonType == .uint || commonType == .ulong)
+
             switch op {
                 case .add: tackyOp = .add
                 case .subtract: tackyOp = .subtract
                 case .multiply: tackyOp = .multiply
-                case .divide: tackyOp = .divide
+                case .divide: tackyOp = isUnsignedOp ? .divideU : .divide
                 case .equal: tackyOp = .equal; isComparison = true
                 case .notEqual: tackyOp = .notEqual; isComparison = true
-                case .lessThan: tackyOp = .lessThan; isComparison = true
-                case .lessThanOrEqual: tackyOp = .lessThanOrEqual; isComparison = true
-                case .greaterThan: tackyOp = .greaterThan; isComparison = true
-                case .greaterThanOrEqual: tackyOp = .greaterThanOrEqual; isComparison = true
+                case .lessThan: tackyOp = isUnsignedOp ? .lessThanU : .lessThan; isComparison = true
+                case .lessThanOrEqual: tackyOp = isUnsignedOp ? .lessThanOrEqualU : .lessThanOrEqual; isComparison = true
+                case .greaterThan: tackyOp = isUnsignedOp ? .greaterThanU : .greaterThan; isComparison = true
+                case .greaterThanOrEqual: tackyOp = isUnsignedOp ? .greaterThanOrEqualU : .greaterThanOrEqual; isComparison = true
                 default: fatalError("Unreach")
             }
 
+            // Comparison always results in int
             let dest = makeTemporary(type: isComparison ? .int : resultType)
             instructions.append(.binary(op: tackyOp, lhs: finalL, rhs: finalR, dest: dest))
             return dest

@@ -300,9 +300,19 @@ struct Parser {
         } else if peek() == .keywordLong {
             advance()
             return .long
+        } else if peek() == .keywordUnsigned {
+            advance()
+            if peek() == .keywordInt {
+                advance()
+                return .unsignedInt
+            } else if peek() == .keywordLong {
+                advance()
+                return .unsignedLong
+            }
+            return .unsignedInt // Default 'unsigned' is 'unsigned int'
         } else {
              // Fallback for better error
-             throw ParserError.expectedToken("type specifier (int, long)", found: peek())
+             throw ParserError.expectedToken("type specifier (int, long, unsigned)", found: peek())
         }
     }
 
@@ -332,7 +342,7 @@ struct Parser {
     }
 
     private mutating func parseBlockItem() throws -> BlockItem {
-        if peek() == .keywordInt || peek() == .keywordLong || peek() == .keywordStatic {
+        if peek() == .keywordInt || peek() == .keywordLong || peek() == .keywordStatic || peek() == .keywordUnsigned {
             return .declaration(try parseDeclaration())
         } else {
             return .statement(try parseStatement())
@@ -406,23 +416,39 @@ struct Parser {
         
         while peek() != .eof {
             // Distinguish between function and variable declaration
-            // [static] int identifier ...
+            // [static] [unsigned] [int/long] identifier ...
             
             var offset = 0
-            if peek() == .keywordStatic {
-                offset = 1
+            if currentIndex + offset < tokens.count && tokens[currentIndex + offset] == .keywordStatic {
+                offset += 1
             }
             
-            // Safety check for lookahead
-            if currentIndex + offset + 2 >= tokens.count {
-               // Not enough tokens, assume variable (parseDeclaration handles error)
-               items.append(.variable(try parseDeclaration()))
-               continue
+            // Check for unsigned
+            var typeTokenLength = 1
+             if currentIndex + offset < tokens.count && tokens[currentIndex + offset] == .keywordUnsigned {
+                // Could be 'unsigned int', 'unsigned long' or just 'unsigned'
+                if currentIndex + offset + 1 < tokens.count {
+                    let next = tokens[currentIndex + offset + 1]
+                    if next == .keywordInt || next == .keywordLong {
+                        typeTokenLength = 2
+                    }
+                }
             }
             
-            let thirdToken = tokens[currentIndex + offset + 2]
+            // Identifier is at currentIndex + offset + typeTokenLength - 1 ? No.
+            // If type is 1 token (int): Ident is at +1. (offset + 1)
+            // If type is 2 tokens (unsigned int): Ident is at +2. (offset + 2)
             
-            if thirdToken == .openParen {
+            let identifierIndex = currentIndex + offset + typeTokenLength
+            let expectedParenIndex = identifierIndex + 1
+            
+            // Safety check
+            if expectedParenIndex >= tokens.count {
+                 items.append(.variable(try parseDeclaration()))
+                 continue
+            }
+            
+            if tokens[expectedParenIndex] == .openParen {
                 items.append(.function(try parseFunction()))
             } else {
                 items.append(.variable(try parseDeclaration()))

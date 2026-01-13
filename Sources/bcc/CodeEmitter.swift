@@ -104,6 +104,8 @@ struct CodeEmitter {
             return "  imulq \(emit(operand: src, size: .q)), \(emit(operand: dest, size: .q))\n"
         case .idivq(let src):
             return "  idivq \(emit(operand: src, size: .q))\n"
+        case .divq(let src):
+            return "  divq \(emit(operand: src, size: .q))\n"
         case .negq(let dest):
             return "  negq \(emit(operand: dest, size: .q))\n"
         case .notq(let dest):
@@ -121,8 +123,8 @@ struct CodeEmitter {
         case .imull(let src, let dest):
             return "  imull \(emit(operand: src, size: .l)), \(emit(operand: dest, size: .l))\n"
         case .idivl(let op):
-            return "  idivl \(emit(operand: op, size: .l))\n"
-        case .cdq:
+            return "  idivl \(emit(operand: op, size: .l))\n"        case .divl(let src):
+            return "  divl \(emit(operand: src, size: .l))\n"        case .cdq:
             return "  cdq\n"
         case .cmpl(let src, let dest):
             return "  cmpl \(emit(operand: src, size: .l)), \(emit(operand: dest, size: .l))\n"
@@ -142,6 +144,14 @@ struct CodeEmitter {
             return "  setg \(emit(operand: op, size: .b))\n"
         case .setge(let op):
             return "  setge \(emit(operand: op, size: .b))\n"
+        case .setb(let op):
+            return "  setb \(emit(operand: op, size: .b))\n"
+        case .setbe(let op):
+            return "  setbe \(emit(operand: op, size: .b))\n"
+        case .seta(let op):
+            return "  seta \(emit(operand: op, size: .b))\n"
+        case .setae(let op):
+            return "  setae \(emit(operand: op, size: .b))\n"
         case .jmp(let target):
             return "  jmp \(target)\n"
         case .je(let target):

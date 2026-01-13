@@ -100,6 +100,7 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
     case subq(AsmOperand, AsmOperand) // 64-bit subtract
     case imulq(AsmOperand, AsmOperand)
     case idivq(AsmOperand)
+    case divq(AsmOperand)
     case negq(AsmOperand)
     case notq(AsmOperand)
     case cmpq(AsmOperand, AsmOperand)
@@ -111,6 +112,7 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
     case subl(AsmOperand, AsmOperand)
     case imull(AsmOperand, AsmOperand)
     case idivl(AsmOperand)
+    case divl(AsmOperand)
     case cdq // Sign extend EAX to EDX:EAX for division
     case cmpl(AsmOperand, AsmOperand)
     case negl(AsmOperand)
@@ -121,6 +123,10 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
     case setle(AsmOperand)
     case setg(AsmOperand)
     case setge(AsmOperand)
+    case setb(AsmOperand)
+    case setbe(AsmOperand)
+    case seta(AsmOperand)
+    case setae(AsmOperand)
     case jmp(String)
     case je(String)
     case jne(String)
@@ -144,6 +150,8 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
             return "imulq \(src.description), \(dest.description)"
         case .idivq(let op):
             return "idivq \(op.description)"
+        case .divq(let op):
+            return "divq \(op.description)"
         case .negq(let op):
             return "negq \(op.description)"
         case .notq(let op):
@@ -162,6 +170,8 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
             return "imull \(src.description), \(dest.description)"
         case .idivl(let op):
             return "idivl \(op.description)"
+        case .divl(let op):
+            return "divl \(op.description)"
         case .cdq:
             return "cdq"
         case .negl(let op):
@@ -182,6 +192,14 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
             return "setg \(op.description)"
         case .setge(let op):
             return "setge \(op.description)"
+        case .setb(let op):
+            return "setb \(op.description)"
+        case .setbe(let op):
+            return "setbe \(op.description)"
+        case .seta(let op):
+            return "seta \(op.description)"
+        case .setae(let op):
+            return "setae \(op.description)"
         case .jmp(let target):
             return "jmp \(target)"
         case .je(let target):

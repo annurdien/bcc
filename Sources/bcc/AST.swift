@@ -5,11 +5,15 @@ private func indent(_ s: String) -> String {
 enum CType: Equatable, CustomStringConvertible {
     case int
     case long
+    case unsignedInt
+    case unsignedLong
     
     var description: String {
         switch self {
         case .int: return "int"
         case .long: return "long"
+        case .unsignedInt: return "unsigned int"
+        case .unsignedLong: return "unsigned long"
         }
     }
 }
