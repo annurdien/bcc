@@ -135,20 +135,26 @@ struct Lexer {
                 return scanNextToken()
             }
             return .slash
+        case "%":
+            advance()
+            return .percent
         case "&":
             advance()
             if peek() == "&" {
                 advance()
                 return .ampersandAmpersand
             }
-            return nil // Single & not yet supported
+            return .ampersand
         case "|":
             advance()
             if peek() == "|" {
                 advance()
                 return .pipePipe
             }
-            return nil // Single | not yet supported
+            return .pipe
+        case "^":
+            advance()
+            return .caret
         case "=":
             advance()
             if peek() == "=" {
@@ -161,6 +167,9 @@ struct Lexer {
             if peek() == "=" {
                 advance()
                 return .lessThanEqual
+            } else if peek() == "<" {
+                advance()
+                return .lessThanLessThan
             }
             return .lessThan
         case ">":
@@ -168,6 +177,9 @@ struct Lexer {
             if peek() == "=" {
                 advance()
                 return .greaterThanEqual
+            } else if peek() == ">" {
+                advance()
+                return .greaterThanGreaterThan
             }
             return .greaterThan
         case "-":

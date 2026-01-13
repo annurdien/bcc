@@ -112,6 +112,18 @@ struct CodeEmitter {
             return "  notq \(emit(operand: dest, size: .q))\n"
         case .cmpq(let src, let dest):
             return "  cmpq \(emit(operand: src, size: .q)), \(emit(operand: dest, size: .q))\n"
+        case .andq(let src, let dest):
+            return "  andq \(emit(operand: src, size: .q)), \(emit(operand: dest, size: .q))\n"
+        case .orq(let src, let dest):
+            return "  orq \(emit(operand: src, size: .q)), \(emit(operand: dest, size: .q))\n"
+        case .xorq(let src, let dest):
+            return "  xorq \(emit(operand: src, size: .q)), \(emit(operand: dest, size: .q))\n"
+        case .salq(let src, let dest):
+            return "  salq \(emit(operand: src, size: .b)), \(emit(operand: dest, size: .q))\n"
+        case .sarq(let src, let dest):
+            return "  sarq \(emit(operand: src, size: .b)), \(emit(operand: dest, size: .q))\n"
+        case .shrq(let src, let dest):
+            return "  shrq \(emit(operand: src, size: .b)), \(emit(operand: dest, size: .q))\n"
         case .cqo:
             return "  cqo\n"
         case .movl(let src, let dest):
@@ -132,6 +144,18 @@ struct CodeEmitter {
             return "  negl \(emit(operand: op, size: .l))\n"
         case .notl(let op):
             return "  notl \(emit(operand: op, size: .l))\n"
+        case .andl(let src, let dest):
+            return "  andl \(emit(operand: src, size: .l)), \(emit(operand: dest, size: .l))\n"
+        case .orl(let src, let dest):
+            return "  orl \(emit(operand: src, size: .l)), \(emit(operand: dest, size: .l))\n"
+        case .xorl(let src, let dest):
+            return "  xorl \(emit(operand: src, size: .l)), \(emit(operand: dest, size: .l))\n"
+        case .sall(let src, let dest):
+            return "  sall \(emit(operand: src, size: .b)), \(emit(operand: dest, size: .l))\n"
+        case .sarl(let src, let dest):
+            return "  sarl \(emit(operand: src, size: .b)), \(emit(operand: dest, size: .l))\n"
+        case .shrl(let src, let dest):
+            return "  shrl \(emit(operand: src, size: .b)), \(emit(operand: dest, size: .l))\n"
         case .setz(let op):
             return "  setz \(emit(operand: op, size: .b))\n"
         case .setnz(let op):

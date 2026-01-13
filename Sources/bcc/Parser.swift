@@ -106,14 +106,22 @@ struct Parser {
 
     private func getPrecedence(_ token: Token) -> Int {
         switch token {
-        case .star, .slash:
+        case .star, .slash, .percent:
             return 50
         case .plus, .minus:
+            return 45
+        case .lessThanLessThan, .greaterThanGreaterThan:
             return 40
         case .lessThan, .lessThanEqual, .greaterThan, .greaterThanEqual:
-            return 30
+            return 35
         case .equalEqual, .exclamationEqual:
+            return 30
+        case .ampersand:
+            return 25
+        case .caret:
             return 20
+        case .pipe:
+            return 15
         case .ampersandAmpersand:
             return 10
         case .pipePipe:
@@ -129,12 +137,18 @@ struct Parser {
         case .minus: return .subtract
         case .star: return .multiply
         case .slash: return .divide
+        case .percent: return .remainder
+        case .lessThanLessThan: return .shiftLeft
+        case .greaterThanGreaterThan: return .shiftRight
         case .lessThan: return .lessThan
         case .lessThanEqual: return .lessThanOrEqual
         case .greaterThan: return .greaterThan
         case .greaterThanEqual: return .greaterThanOrEqual
         case .equalEqual: return .equal
         case .exclamationEqual: return .notEqual
+        case .ampersand: return .bitwiseAnd
+        case .caret: return .bitwiseXor
+        case .pipe: return .bitwiseOr
         case .ampersandAmpersand: return .logicalAnd
         case .pipePipe: return .logicalOr
         default: return nil

@@ -118,6 +118,12 @@ enum TackyBinaryOperator: Equatable, CustomStringConvertible {
     case greaterThanU
     case greaterThanOrEqual
     case greaterThanOrEqualU
+    case bitwiseAnd
+    case bitwiseOr
+    case bitwiseXor
+    case shiftLeft
+    case shiftRight
+    case shiftRightU
     
     var description: String {
         switch self {
@@ -138,6 +144,12 @@ enum TackyBinaryOperator: Equatable, CustomStringConvertible {
         case .greaterThanU: return "GreaterThanU"
         case .greaterThanOrEqual: return "GreaterThanOrEqual"
         case .greaterThanOrEqualU: return "GreaterThanOrEqualU"
+        case .bitwiseAnd: return "BitwiseAnd"
+        case .bitwiseOr: return "BitwiseOr"
+        case .bitwiseXor: return "BitwiseXor"
+        case .shiftLeft: return "ShiftLeft"
+        case .shiftRight: return "ShiftRight"
+        case .shiftRightU: return "ShiftRightU"
         }
     }
 }

@@ -104,6 +104,12 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
     case negq(AsmOperand)
     case notq(AsmOperand)
     case cmpq(AsmOperand, AsmOperand)
+    case andq(AsmOperand, AsmOperand)
+    case orq(AsmOperand, AsmOperand)
+    case xorq(AsmOperand, AsmOperand)
+    case salq(AsmOperand, AsmOperand)
+    case sarq(AsmOperand, AsmOperand)
+    case shrq(AsmOperand, AsmOperand)
     case cqo // Sign extend RAX to RDX:RAX
 
     // Operations (32-bit)
@@ -117,6 +123,12 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
     case cmpl(AsmOperand, AsmOperand)
     case negl(AsmOperand)
     case notl(AsmOperand)
+    case andl(AsmOperand, AsmOperand)
+    case orl(AsmOperand, AsmOperand)
+    case xorl(AsmOperand, AsmOperand)
+    case sall(AsmOperand, AsmOperand)
+    case sarl(AsmOperand, AsmOperand)
+    case shrl(AsmOperand, AsmOperand)
     case setz(AsmOperand)
     case setnz(AsmOperand)
     case setl(AsmOperand)
@@ -160,6 +172,12 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
             return "cmpq \(src.description), \(dest.description)"
         case .cqo:
             return "cqo"
+        case .andq(let src, let dest): return "andq \(src.description), \(dest.description)"
+        case .orq(let src, let dest): return "orq \(src.description), \(dest.description)"
+        case .xorq(let src, let dest): return "xorq \(src.description), \(dest.description)"
+        case .salq(let src, let dest): return "salq \(src.description), \(dest.description)"
+        case .sarq(let src, let dest): return "sarq \(src.description), \(dest.description)"
+        case .shrq(let src, let dest): return "shrq \(src.description), \(dest.description)"
         case .movl(let src, let dest):
             return "movl \(src.description), \(dest.description)"
         case .addl(let src, let dest):
@@ -178,6 +196,12 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
             return "negl \(op.description)"
         case .notl(let op):
             return "notl \(op.description)"
+        case .andl(let src, let dest): return "andl \(src.description), \(dest.description)"
+        case .orl(let src, let dest): return "orl \(src.description), \(dest.description)"
+        case .xorl(let src, let dest): return "xorl \(src.description), \(dest.description)"
+        case .sall(let src, let dest): return "sall \(src.description), \(dest.description)"
+        case .sarl(let src, let dest): return "sarl \(src.description), \(dest.description)"
+        case .shrl(let src, let dest): return "shrl \(src.description), \(dest.description)"
         case .cmpl(let src, let dest):
             return "cmpl \(src.description), \(dest.description)"
         case .setz(let op):

@@ -186,6 +186,12 @@ enum BinaryOperator: Equatable, CustomStringConvertible {
     case lessThanOrEqual
     case greaterThan
     case greaterThanOrEqual
+    case remainder
+    case bitwiseAnd
+    case bitwiseOr
+    case bitwiseXor
+    case shiftLeft
+    case shiftRight
 
     var description: String {
         switch self {
@@ -193,6 +199,12 @@ enum BinaryOperator: Equatable, CustomStringConvertible {
         case .subtract: return "Subtract"
         case .multiply: return "Multiply"
         case .divide: return "Divide"
+        case .remainder: return "Remainder"
+        case .bitwiseAnd: return "BitwiseAnd"
+        case .bitwiseOr: return "BitwiseOr"
+        case .bitwiseXor: return "BitwiseXor"
+        case .shiftLeft: return "ShiftLeft"
+        case .shiftRight: return "ShiftRight"
         case .logicalAnd: return "And"
         case .logicalOr: return "Or"
         case .equal: return "Equal"

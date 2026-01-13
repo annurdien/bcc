@@ -169,9 +169,31 @@ struct AssemblyGenerator {
                             instructions.append(.movq(.register(.rax), destOp))
                         case .divideU:
                             instructions.append(.movq(lhsOp, .register(.rax)))
-                            instructions.append(.movq(.immediate(0), .register(.rdx))) // Zero RDX
+                            instructions.append(.movq(.immediate(0), .register(.rdx))) 
                              instructions.append(.divq(rhsOp))
                              instructions.append(.movq(.register(.rax), destOp))
+                        case .remainder:
+                            instructions.append(.movq(lhsOp, .register(.rax)))
+                            instructions.append(.cqo)
+                            instructions.append(.idivq(rhsOp))
+                            instructions.append(.movq(.register(.rdx), destOp))
+                        case .remainderU:
+                            instructions.append(.movq(lhsOp, .register(.rax)))
+                            instructions.append(.movq(.immediate(0), .register(.rdx)))
+                            instructions.append(.divq(rhsOp))
+                            instructions.append(.movq(.register(.rdx), destOp))
+                        case .bitwiseAnd: instructions.append(.andq(rhsOp, destOp))
+                        case .bitwiseOr: instructions.append(.orq(rhsOp, destOp))
+                        case .bitwiseXor: instructions.append(.xorq(rhsOp, destOp))
+                        case .shiftLeft: 
+                             if case .immediate(_) = rhsOp { instructions.append(.salq(rhsOp, destOp)) }
+                             else { instructions.append(.movq(rhsOp, .register(.rcx))); instructions.append(.salq(.register(.rcx), destOp)) }
+                        case .shiftRight:
+                             if case .immediate(_) = rhsOp { instructions.append(.sarq(rhsOp, destOp)) }
+                             else { instructions.append(.movq(rhsOp, .register(.rcx))); instructions.append(.sarq(.register(.rcx), destOp)) }
+                        case .shiftRightU:
+                             if case .immediate(_) = rhsOp { instructions.append(.shrq(rhsOp, destOp)) }
+                             else { instructions.append(.movq(rhsOp, .register(.rcx))); instructions.append(.shrq(.register(.rcx), destOp)) }
                         default: break
                         }
                     } else {
@@ -187,9 +209,31 @@ struct AssemblyGenerator {
                             instructions.append(.movl(.register(.eax), destOp))
                         case .divideU:
                             instructions.append(.movl(lhsOp, .register(.eax)))
-                            instructions.append(.movl(.immediate(0), .register(.rdx))) // Zero EDX (Wait, Divl uses Edx:Eax)
+                            instructions.append(.movl(.immediate(0), .register(.rdx))) 
                             instructions.append(.divl(rhsOp))
                             instructions.append(.movl(.register(.eax), destOp))
+                        case .remainder:
+                            instructions.append(.movl(lhsOp, .register(.eax)))
+                            instructions.append(.cdq)
+                            instructions.append(.idivl(rhsOp))
+                            instructions.append(.movl(.register(.rdx), destOp))
+                        case .remainderU:
+                            instructions.append(.movl(lhsOp, .register(.eax)))
+                            instructions.append(.movl(.immediate(0), .register(.rdx)))
+                            instructions.append(.divl(rhsOp))
+                            instructions.append(.movl(.register(.rdx), destOp))
+                        case .bitwiseAnd: instructions.append(.andl(rhsOp, destOp))
+                        case .bitwiseOr: instructions.append(.orl(rhsOp, destOp))
+                        case .bitwiseXor: instructions.append(.xorl(rhsOp, destOp))
+                        case .shiftLeft:
+                             if case .immediate(_) = rhsOp { instructions.append(.sall(rhsOp, destOp)) }
+                             else { instructions.append(.movl(rhsOp, .register(.ecx))); instructions.append(.sall(.register(.ecx), destOp)) }
+                        case .shiftRight:
+                             if case .immediate(_) = rhsOp { instructions.append(.sarl(rhsOp, destOp)) }
+                             else { instructions.append(.movl(rhsOp, .register(.ecx))); instructions.append(.sarl(.register(.ecx), destOp)) }
+                        case .shiftRightU: // Logical
+                             if case .immediate(_) = rhsOp { instructions.append(.shrl(rhsOp, destOp)) }
+                             else { instructions.append(.movl(rhsOp, .register(.ecx))); instructions.append(.shrl(.register(.ecx), destOp)) }
                         default: break
                         }
                     }
@@ -290,6 +334,12 @@ struct AssemblyGenerator {
             case .idivl(let op): newInstructions.append(.idivl(mapOperand(op)))
             case .divl(let op): newInstructions.append(.divl(mapOperand(op)))
             case .cmpl(let src, let dest): newInstructions.append(.cmpl(mapOperand(src), mapOperand(dest)))
+            case .andl(let src, let dest): newInstructions.append(.andl(mapOperand(src), mapOperand(dest)))
+            case .orl(let src, let dest): newInstructions.append(.orl(mapOperand(src), mapOperand(dest)))
+            case .xorl(let src, let dest): newInstructions.append(.xorl(mapOperand(src), mapOperand(dest)))
+            case .sall(let src, let dest): newInstructions.append(.sall(mapOperand(src), mapOperand(dest)))
+            case .sarl(let src, let dest): newInstructions.append(.sarl(mapOperand(src), mapOperand(dest)))
+            case .shrl(let src, let dest): newInstructions.append(.shrl(mapOperand(src), mapOperand(dest)))
             
             case .movq(let src, let dest): newInstructions.append(.movq(mapOperand(src), mapOperand(dest)))
             case .addq(let src, let dest): newInstructions.append(.addq(mapOperand(src), mapOperand(dest)))
@@ -300,6 +350,12 @@ struct AssemblyGenerator {
             case .negq(let op): newInstructions.append(.negq(mapOperand(op)))
             case .notq(let op): newInstructions.append(.notq(mapOperand(op)))
             case .cmpq(let src, let dest): newInstructions.append(.cmpq(mapOperand(src), mapOperand(dest)))
+            case .andq(let src, let dest): newInstructions.append(.andq(mapOperand(src), mapOperand(dest)))
+            case .orq(let src, let dest): newInstructions.append(.orq(mapOperand(src), mapOperand(dest)))
+            case .xorq(let src, let dest): newInstructions.append(.xorq(mapOperand(src), mapOperand(dest)))
+            case .salq(let src, let dest): newInstructions.append(.salq(mapOperand(src), mapOperand(dest)))
+            case .sarq(let src, let dest): newInstructions.append(.sarq(mapOperand(src), mapOperand(dest)))
+            case .shrq(let src, let dest): newInstructions.append(.shrq(mapOperand(src), mapOperand(dest)))
             
             case .setz(let op): newInstructions.append(.setz(mapOperand(op)))
             case .setnz(let op): newInstructions.append(.setnz(mapOperand(op)))
@@ -360,6 +416,21 @@ struct AssemblyGenerator {
                     finalInstructions.append(.movl(src, .register(.r10d)))
                     finalInstructions.append(.subl(.register(.r10d), dest))
                 } else { finalInstructions.append(inst) }
+            case .andl(let src, let dest):
+                 if isMemory(src) && isMemory(dest) {
+                    finalInstructions.append(.movl(src, .register(.r10d)))
+                    finalInstructions.append(.andl(.register(.r10d), dest))
+                 } else { finalInstructions.append(inst) }
+            case .orl(let src, let dest):
+                 if isMemory(src) && isMemory(dest) {
+                    finalInstructions.append(.movl(src, .register(.r10d)))
+                    finalInstructions.append(.orl(.register(.r10d), dest))
+                 } else { finalInstructions.append(inst) }
+            case .xorl(let src, let dest):
+                 if isMemory(src) && isMemory(dest) {
+                    finalInstructions.append(.movl(src, .register(.r10d)))
+                    finalInstructions.append(.xorl(.register(.r10d), dest))
+                 } else { finalInstructions.append(inst) }
             case .imull(let src, let dest):
                 if isMemory(dest) {
                     finalInstructions.append(.movl(dest, .register(.r10d)))
@@ -402,6 +473,21 @@ struct AssemblyGenerator {
                 if (isMemory(src) && isMemory(dest)) || isLargeImm(src) {
                     finalInstructions.append(.movq(src, .register(.r10)))
                     finalInstructions.append(.subq(.register(.r10), dest))
+                } else { finalInstructions.append(inst) }
+            case .andq(let src, let dest):
+                if (isMemory(src) && isMemory(dest)) || isLargeImm(src) {
+                    finalInstructions.append(.movq(src, .register(.r10)))
+                    finalInstructions.append(.andq(.register(.r10), dest))
+                } else { finalInstructions.append(inst) }
+            case .orq(let src, let dest):
+                if (isMemory(src) && isMemory(dest)) || isLargeImm(src) {
+                    finalInstructions.append(.movq(src, .register(.r10)))
+                    finalInstructions.append(.orq(.register(.r10), dest))
+                } else { finalInstructions.append(inst) }
+            case .xorq(let src, let dest):
+                if (isMemory(src) && isMemory(dest)) || isLargeImm(src) {
+                    finalInstructions.append(.movq(src, .register(.r10)))
+                    finalInstructions.append(.xorq(.register(.r10), dest))
                 } else { finalInstructions.append(inst) }
             case .imulq(let src, let dest):
                  if isMemory(dest) {

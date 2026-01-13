@@ -27,16 +27,22 @@ enum Token: Equatable {
     case plus
     case star
     case slash
+    case percent
     case questionMark
     case colon
     case comma
+    case ampersand
+    case pipe
+    case caret
     case ampersandAmpersand
     case pipePipe
     case equalEqual
     case exclamationEqual
     case lessThan
+    case lessThanLessThan
     case lessThanEqual
     case greaterThan
+    case greaterThanGreaterThan
     case greaterThanEqual
     case equal // = Assignment
 

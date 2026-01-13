@@ -43,6 +43,18 @@
 - [x] Stage 10 - Static Variables
     - [x] Static Global Variables (Internal Linkage)
     - [x] Static Local Variables (Persistence)
+- [x] Stage 11 - Long Integers
+    - [x] 64-bit Integer type (`long`)
+    - [x] Type Promotion
+- [x] Stage 12 - Unsigned Integers
+    - [x] Unsigned types (`unsigned int`, `unsigned long`)
+    - [x] Unsigned Arithmetic & Comparison
+- [x] Stage 13 - Bitwise Operators
+    - [x] AND (`&`)
+    - [x] OR (`|`)
+    - [x] XOR (`^`)
+    - [x] Shift Left (`<<`)
+    - [x] Shift Right (`>>`)
 
 
 

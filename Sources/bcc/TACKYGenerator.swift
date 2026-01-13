@@ -157,6 +157,7 @@ struct TACKYGenerator {
             case .subtract: return lVal - rVal
             case .multiply: return lVal * rVal
             case .divide: return (rVal == 0) ? 0 : (lVal / rVal) 
+            case .remainder: return (rVal == 0) ? 0 : (lVal % rVal)
             case .equal: return (lVal == rVal) ? 1 : 0
             case .notEqual: return (lVal != rVal) ? 1 : 0
             case .lessThan: return (lVal < rVal) ? 1 : 0
@@ -165,6 +166,11 @@ struct TACKYGenerator {
             case .greaterThanOrEqual: return (lVal >= rVal) ? 1 : 0
             case .logicalAnd: return ((lVal != 0) && (rVal != 0)) ? 1 : 0
             case .logicalOr: return ((lVal != 0) || (rVal != 0)) ? 1 : 0
+            case .bitwiseAnd: return lVal & rVal
+            case .bitwiseOr: return lVal | rVal
+            case .bitwiseXor: return lVal ^ rVal
+            case .shiftLeft: return lVal << rVal
+            case .shiftRight: return lVal >> rVal
             }
         case .conditional(let cond, let thenExpr, let elseExpr):
             let condVal = try evaluateConstant(cond, contextName: contextName)
@@ -457,68 +463,64 @@ struct TACKYGenerator {
             var finalL = lhs
             var finalR = rhs
             let resultType: TackyType
-            
-            // Type Promotion Logic
-            // Hierarchy: ulong > long > uint > int
-            // (Note: C Standard says if long can hold all uint, use long (signed). LP64: long is 64, uint is 32. So long > uint.)
-            
-            var commonType: TackyType = .int
-            
-            if lType == .ulong || rType == .ulong {
-                commonType = .ulong
-            } else if lType == .long || rType == .long {
-                // If one is long and other is uint:
-                // long size (8) > uint size (4). So convert uint to long.
-                commonType = .long
-            } else if lType == .uint || rType == .uint {
-                commonType = .uint
-            } else {
-                commonType = .int
-            }
-            
-            resultType = commonType
-            
-            // Cast operands via copy (which creates movs/movz in backend ideally)
-            // Currently .copy assumes sign extension for int->long? We need explicit zero extension?
-            // Backend `isLong(src)` vs `isLong(dest)`.
-            // We might need explicit cast instructions in TACKY if copy semantics are ambiguous. 
-            
-            if lType != commonType {
-                let tmp = makeTemporary(type: commonType)
-                // For uint -> long, we need zero extension.
-                // For int -> long, we need sign extension.
-                // Our backend 'copy' treats everything as movq/movl based on DEST size.
-                // If movq src(32), dest(64):
-                //   If src is 'int' (signed 32), we want movsxd (sign extend).
-                //   If src is 'uint' (unsigned 32), we want mov (zero extend).
-                // Current backend just calls 'movslq' or similar? NO it calls `movq`.
-                // If strictness required, we'll need backend support.
-                // Assuming backend handles it or we fix it later.
-                instructions.append(.copy(src: lhs, dest: tmp))
-                finalL = tmp
-            }
-            if rType != commonType {
-                let tmp = makeTemporary(type: commonType)
-                instructions.append(.copy(src: rhs, dest: tmp))
-                finalR = tmp
-            }
-
             let tackyOp: TackyBinaryOperator
             var isComparison = false
-            let isUnsignedOp = (commonType == .uint || commonType == .ulong)
-
-            switch op {
-                case .add: tackyOp = .add
-                case .subtract: tackyOp = .subtract
-                case .multiply: tackyOp = .multiply
-                case .divide: tackyOp = isUnsignedOp ? .divideU : .divide
-                case .equal: tackyOp = .equal; isComparison = true
-                case .notEqual: tackyOp = .notEqual; isComparison = true
-                case .lessThan: tackyOp = isUnsignedOp ? .lessThanU : .lessThan; isComparison = true
-                case .lessThanOrEqual: tackyOp = isUnsignedOp ? .lessThanOrEqualU : .lessThanOrEqual; isComparison = true
-                case .greaterThan: tackyOp = isUnsignedOp ? .greaterThanU : .greaterThan; isComparison = true
-                case .greaterThanOrEqual: tackyOp = isUnsignedOp ? .greaterThanOrEqualU : .greaterThanOrEqual; isComparison = true
-                default: fatalError("Unreach")
+            
+            if op == .shiftLeft || op == .shiftRight {
+                resultType = lType
+                finalL = lhs
+                finalR = rhs
+                
+                let isUnsignedLeft = (lType == .uint || lType == .ulong)
+                if op == .shiftLeft {
+                    tackyOp = .shiftLeft
+                } else {
+                    tackyOp = isUnsignedLeft ? .shiftRightU : .shiftRight
+                }
+            } else {
+                var commonType: TackyType = .int
+                
+                if lType == .ulong || rType == .ulong {
+                    commonType = .ulong
+                } else if lType == .long || rType == .long {
+                    commonType = .long
+                } else if lType == .uint || rType == .uint {
+                    commonType = .uint
+                } else {
+                    commonType = .int
+                }
+                
+                resultType = commonType
+                
+                if lType != commonType {
+                    let tmp = makeTemporary(type: commonType)
+                    instructions.append(.copy(src: lhs, dest: tmp))
+                    finalL = tmp
+                }
+                if rType != commonType {
+                    let tmp = makeTemporary(type: commonType)
+                    instructions.append(.copy(src: rhs, dest: tmp))
+                    finalR = tmp
+                }
+                
+                let isUnsignedOp = (commonType == .uint || commonType == .ulong)
+                switch op {
+                    case .add: tackyOp = .add
+                    case .subtract: tackyOp = .subtract
+                    case .multiply: tackyOp = .multiply
+                    case .divide: tackyOp = isUnsignedOp ? .divideU : .divide
+                    case .remainder: tackyOp = isUnsignedOp ? .remainderU : .remainder
+                    case .bitwiseAnd: tackyOp = .bitwiseAnd
+                    case .bitwiseOr: tackyOp = .bitwiseOr
+                    case .bitwiseXor: tackyOp = .bitwiseXor
+                    case .equal: tackyOp = .equal; isComparison = true
+                    case .notEqual: tackyOp = .notEqual; isComparison = true
+                    case .lessThan: tackyOp = isUnsignedOp ? .lessThanU : .lessThan; isComparison = true
+                    case .lessThanOrEqual: tackyOp = isUnsignedOp ? .lessThanOrEqualU : .lessThanOrEqual; isComparison = true
+                    case .greaterThan: tackyOp = isUnsignedOp ? .greaterThanU : .greaterThan; isComparison = true
+                    case .greaterThanOrEqual: tackyOp = isUnsignedOp ? .greaterThanOrEqualU : .greaterThanOrEqual; isComparison = true
+                    default: fatalError("Unreach")
+                }
             }
 
             // Comparison always results in int
