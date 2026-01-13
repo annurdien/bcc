@@ -4,9 +4,14 @@ struct AssemblyGenerator {
 
     /// Main generation function
     func generate(program: TackyProgram) -> AsmProgram {
+        // Convert globals
+        let asmGlobals = program.globals.map { g in
+             AsmGlobal(name: g.name, initialValue: g.initialValue)
+        }
+        
         // Iterate over all functions in the program
         let asmFunctions = program.functions.map { generateFunction($0) }
-        return AsmProgram(functions: asmFunctions)
+        return AsmProgram(globals: asmGlobals, functions: asmFunctions)
     }
 
     private func generateFunction(_ tackyFunc: TackyFunction) -> AsmFunction {
@@ -189,6 +194,10 @@ struct AssemblyGenerator {
             return .immediate(int)
         case .variable(let name):
             return .pseudoregister(name)
+        case .global(let name):
+             // On macOS it needs _ prefix usually but we handle that in code emitter?
+             // Actually, DataLabel is just the name.
+             return .dataLabel(name)
         }
     }
 
@@ -203,14 +212,45 @@ struct AssemblyGenerator {
                 return operand
             }
             
+            // Check if it is already mapped to stack
             if let offset = mapping[name] {
                 return .stackOffset(offset)
-            } else {
-                let offset = nextStackOffset
-                mapping[name] = offset
-                nextStackOffset -= 4 // Allocate next slot
-                return .stackOffset(offset)
-            }
+            } 
+            
+            // NOTE:
+            // Since we don't differentiate between Local and Global in TackyValue.variable,
+            // we have a heuristic here:
+            // Globals are user-defined names.
+            // Stack locals are user-defined names (params/locals) OR "tmp.X".
+            // If we don't have a list of valid locals for this function, we can't be 100% sure.
+            // BUT: TACKYGenerator generates unique names for locals if needed (we aren't doing that fully yet for user vars though).
+            // Actually, TACKYGenerator should probably verify variables.
+            
+            // Wait, standard practice in simple compilers:
+            // If the variable is NOT a local or parameter, it is a global.
+            // We need the list of locals/params?
+            // OR: We treat everything as local unless we find it in a global table?
+            // But we don't have access to the global table inside generateFunction unless we pass it.
+            
+            // Simpler Hack for now:
+            // We assume that if `replacePseudoregisters` is called, it should map ALL locals.
+            // If we encounter a name that we haven't seen before... is it a new local being defined? 
+            // Or a global being referenced?
+            // In assembly generation, we allocate stack slots for ALL pseudoregisters we encounter.
+            // If we want to support globals, we must NOT turn them into stack slots.
+            
+            // We need to know which names are Globals.
+            // Let's pass 'globalNames' into this function or context.
+            // For now, let's just cheat: we won't allocate stack slots for things that look like globals?
+            // No, user variables look just like globals.
+            
+            // Correction: We need to change TackyValue to .global(String) to make it explicit.
+            // Let's update TACKY.swift and TACKYGenerator.swift to use .global for globals.
+            
+             let offset = nextStackOffset
+             mapping[name] = offset
+             nextStackOffset -= 4 // Allocate next slot
+             return .stackOffset(offset)
         }
 
         for inst in instructions {
@@ -270,11 +310,18 @@ struct AssemblyGenerator {
     private func fixUpInstructions(_ instructions: [AsmInstruction]) -> [AsmInstruction] {
         var finalInstructions: [AsmInstruction] = []
         
+        // Helper to check if operand is memory (Stack or Global Label)
+        func isMemory(_ op: AsmOperand) -> Bool {
+            if case .stackOffset = op { return true }
+            if case .dataLabel = op { return true }
+            return false
+        }
+        
         for inst in instructions {
             switch inst {
             // movl mem, mem is illegal.
             case .movl(let src, let dest):
-                if case .stackOffset = src, case .stackOffset = dest {
+                if isMemory(src) && isMemory(dest) {
                     finalInstructions.append(.movl(src, .register(.r10d)))
                     finalInstructions.append(.movl(.register(.r10d), dest))
                 } else {
@@ -283,19 +330,22 @@ struct AssemblyGenerator {
 
             // cmpl mem, mem is illegal. Dest cannot be immediate.
             case .cmpl(let src, let dest):
-                if case .stackOffset = src, case .stackOffset = dest {
+                if isMemory(src) && isMemory(dest) {
                     finalInstructions.append(.movl(src, .register(.r10d)))
                     finalInstructions.append(.cmpl(.register(.r10d), dest))
                 } else if case .immediate = dest {
                     finalInstructions.append(.movl(dest, .register(.r10d)))
                     finalInstructions.append(.cmpl(src, .register(.r10d)))
+                } else if isMemory(dest) && !isMemory(src) {
+                     // cmpl reg/imm, mem is Valid.
+                     finalInstructions.append(inst)
                 } else {
                     finalInstructions.append(inst)
                 }
 
             // addl mem, mem is illegal
             case .addl(let src, let dest):
-                if case .stackOffset = src, case .stackOffset = dest {
+                if isMemory(src) && isMemory(dest) {
                     finalInstructions.append(.movl(src, .register(.r10d)))
                     finalInstructions.append(.addl(.register(.r10d), dest))
                 } else {
@@ -304,7 +354,7 @@ struct AssemblyGenerator {
 
             // subl mem, mem is illegal
             case .subl(let src, let dest):
-                 if case .stackOffset = src, case .stackOffset = dest {
+                 if isMemory(src) && isMemory(dest) {
                     finalInstructions.append(.movl(src, .register(.r10d)))
                     finalInstructions.append(.subl(.register(.r10d), dest))
                 } else {
@@ -313,10 +363,10 @@ struct AssemblyGenerator {
 
             // imull mem, mem is illegal
             case .imull(let src, let dest):
-                 if case .stackOffset = src, case .stackOffset = dest {
+                 if isMemory(src) && isMemory(dest) {
                     finalInstructions.append(.movl(src, .register(.r10d)))
                     finalInstructions.append(.imull(.register(.r10d), dest))
-                } else if case .stackOffset = dest { 
+                } else if isMemory(dest) { 
                     // imull's 2-operand form: dest must be register.
                     finalInstructions.append(.movl(dest, .register(.r10d)))
                     finalInstructions.append(.imull(src, .register(.r10d)))

@@ -372,12 +372,30 @@ struct Parser {
     }
 
     mutating func parse() throws -> Program {
-        var functions: [FunctionDeclaration] = []
+        var items: [TopLevelItem] = []
         
         while peek() != .eof {
-            functions.append(try parseFunction())
+            // Distinguish between function and variable declaration
+            // Both start with "int identifier"
+            // Function: int identifier ( ...
+            // Variable: int identifier = ... or int identifier ;
+            
+            // Safety check for lookahead
+            guard currentIndex + 2 < tokens.count else {
+                // Not enough tokens left, let parseDeclaration handle the error
+                items.append(.variable(try parseDeclaration()))
+                continue
+            }
+            
+            let thirdToken = tokens[currentIndex + 2]
+            
+            if thirdToken == .openParen {
+                items.append(.function(try parseFunction()))
+            } else {
+                items.append(.variable(try parseDeclaration()))
+            }
         }
 
-        return Program(functions: functions)
+        return Program(items: items)
     }
 }

@@ -7,6 +7,8 @@ enum SemanticError: Error, CustomStringConvertible {
     case functionRedefinition(String)
     case undeclaredFunction(String)
     case wrongArgumentCount(function: String, expected: Int, got: Int)
+    case variableRedefinition(String)
+    case nonConstantInitializer(String)
 
     var description: String {
         switch self {
@@ -17,6 +19,8 @@ enum SemanticError: Error, CustomStringConvertible {
         case .undeclaredFunction(let name): return "Semantic Error: Function '\(name)' undeclared"
         case .wrongArgumentCount(let funcName, let expected, let got):
             return "Semantic Error: Function '\(funcName)' expects \(expected) arguments, got \(got)"
+        case .variableRedefinition(let name): return "Semantic Error: Redefinition of global variable '\(name)'"
+        case .nonConstantInitializer(let name): return "Semantic Error: Initializer for global '\(name)' is not constant"
         }
     }
 }
@@ -31,11 +35,10 @@ struct TACKYGenerator {
     // Map function name to argument count
     private var functionSignatures: [String: Int] = [:]
     
-    // Map from original variable name to current unique TACKY variable name
-    // e.g. "x" -> "x.0"
     private var variableMap: [String: String] = [:]
     
     private var declaredVariables: Set<String> = []
+    private var globalVariables: Set<String> = []
 
     private mutating func makeTemporary() -> TackyValue {
         let tempName = "tmp.\(tempCounter)"
@@ -51,26 +54,91 @@ struct TACKYGenerator {
     
     // Rename user variable to unique TACKY variable to handle shadowing later
     // For now we just use the name directly
-    private mutating func resolveVariable(name: String) throws -> String {
-        guard declaredVariables.contains(name) else {
-            throw SemanticError.undeclaredVariable(name)
+    private mutating func resolveVariable(name: String) throws -> TackyValue {
+        if declaredVariables.contains(name) {
+            return .variable(name)
         }
-        return name
+        if globalVariables.contains(name) {
+            return .global(name)
+        }
+        throw SemanticError.undeclaredVariable(name)
     }
 
     mutating func generate(program: Program) throws -> TackyProgram {
         var tackyFunctions: [TackyFunction] = []
-        functionSignatures.removeAll()
+        var tackyGlobals: [TackyGlobal] = []
         
-        for function in program.functions {
-            if functionSignatures[function.name] != nil {
-                throw SemanticError.functionRedefinition(function.name)
+        functionSignatures.removeAll()
+        globalVariables.removeAll()
+        
+        for item in program.items {
+            switch item {
+            case .function(let function):
+                if functionSignatures[function.name] != nil || globalVariables.contains(function.name) {
+                     throw SemanticError.functionRedefinition(function.name)
+                }
+                functionSignatures[function.name] = function.parameters.count
+                tackyFunctions.append(try generate(function: function))
+                
+            case .variable(let decl):
+                if functionSignatures[decl.name] != nil || globalVariables.contains(decl.name) {
+                     throw SemanticError.variableRedefinition(decl.name)
+                }
+                
+                let initVal: Int?
+                if let expr = decl.initializer {
+                    initVal = try evaluateConstant(expr, contextName: decl.name)
+                } else {
+                    initVal = nil
+                }
+                
+                globalVariables.insert(decl.name)
+                tackyGlobals.append(TackyGlobal(name: decl.name, initialValue: initVal))
             }
-            functionSignatures[function.name] = function.parameters.count
-            tackyFunctions.append(try generate(function: function))
         }
         
-        return TackyProgram(functions: tackyFunctions)
+        return TackyProgram(globals: tackyGlobals, functions: tackyFunctions)
+    }
+    
+    private func evaluateConstant(_ expr: Expression, contextName: String) throws -> Int {
+        switch expr {
+        case .constant(let val):
+            return val
+        case .unary(let op, let subExpr):
+            let val = try evaluateConstant(subExpr, contextName: contextName)
+            switch op {
+            case .negate: return -val
+            case .complement: return ~val
+            case .logicalNot: return (val == 0) ? 1 : 0
+            }
+        case .binary(let op, let lhs, let rhs):
+            let lVal = try evaluateConstant(lhs, contextName: contextName)
+            let rVal = try evaluateConstant(rhs, contextName: contextName)
+            switch op {
+            case .add: return lVal + rVal
+            case .subtract: return lVal - rVal
+            case .multiply: return lVal * rVal
+            case .divide: return (rVal == 0) ? 0 : (lVal / rVal) // Avoid crash??
+            case .equal: return (lVal == rVal) ? 1 : 0
+            case .notEqual: return (lVal != rVal) ? 1 : 0
+            case .lessThan: return (lVal < rVal) ? 1 : 0
+            case .lessThanOrEqual: return (lVal <= rVal) ? 1 : 0
+            case .greaterThan: return (lVal > rVal) ? 1 : 0
+            case .greaterThanOrEqual: return (lVal >= rVal) ? 1 : 0
+            case .logicalAnd: return ((lVal != 0) && (rVal != 0)) ? 1 : 0
+            case .logicalOr: return ((lVal != 0) || (rVal != 0)) ? 1 : 0
+            }
+        case .conditional(let cond, let thenExpr, let elseExpr):
+            let condVal = try evaluateConstant(cond, contextName: contextName)
+            if condVal != 0 {
+                return try evaluateConstant(thenExpr, contextName: contextName)
+            } else {
+                return try evaluateConstant(elseExpr, contextName: contextName)
+            }
+        default:
+             // variables, assignments, function calls are not constant
+             throw SemanticError.nonConstantInitializer(contextName)
+        }
     }
 
     private mutating func generate(function: FunctionDeclaration) throws -> TackyFunction {
@@ -244,8 +312,7 @@ struct TACKYGenerator {
             return .constant(value)
         
         case .variable(let name):
-             let varName = try resolveVariable(name: name)
-             return .variable(varName)
+             return try resolveVariable(name: name)
             
         case .conditional(let cond, let thenExpr, let elseExpr):
             let condVal = try generate(expression: cond, into: &instructions)
@@ -286,9 +353,9 @@ struct TACKYGenerator {
 
         case .assignment(let name, let expr):
             let val = try generate(expression: expr, into: &instructions)
-            let varName = try resolveVariable(name: name)
-            instructions.append(.copy(src: val, dest: .variable(varName)))
-            return .variable(varName)
+            let dest = try resolveVariable(name: name)
+            instructions.append(.copy(src: val, dest: dest))
+            return dest
 
         case .unary(let op, let innerExpression):
             let sourceValue = try generate(expression: innerExpression, into: &instructions)

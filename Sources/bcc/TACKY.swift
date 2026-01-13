@@ -5,11 +5,31 @@ private func indent(_ s: String) -> String {
 }
 
 struct TackyProgram: Equatable, CustomStringConvertible {
+    let globals: [TackyGlobal]
     let functions: [TackyFunction]
     
+    // helper for old code
+    var function: TackyFunction {
+        return functions.last!
+    }
+    
     var description: String {
+        let globalsDesc = globals.map { $0.description }.joined(separator: "\n")
         let funcsDesc = functions.map { $0.description }.joined(separator: "\n\n")
-        return "TackyProgram(\n\(indent(funcsDesc))\n)"
+        return "TackyProgram(\nGlobals:\n\(indent(globalsDesc))\n\nFunctions:\n\(indent(funcsDesc))\n)"
+    }
+}
+
+struct TackyGlobal: Equatable, CustomStringConvertible {
+    let name: String
+    let initialValue: Int? // nil for uninitialized (BSS)
+    
+    var description: String {
+        if let val = initialValue {
+            return "Global(name: \(name), init: \(val))"
+        } else {
+            return "Global(name: \(name), uninit)"
+        }
     }
 }
 
@@ -26,12 +46,14 @@ struct TackyFunction: Equatable, CustomStringConvertible {
 
 enum TackyValue: Equatable, CustomStringConvertible {
     case constant(Int)
-    case variable(String) // "tmp.0", "tmp.1"
+    case variable(String) // Local variable or Temporary
+    case global(String)   // Global variable
     
     var description: String {
         switch self {
         case .constant(let val): return "Constant(\(val))"
         case .variable(let name): return "Var(\"\(name)\")"
+        case .global(let name): return "Global(\"\(name)\")"
         }
     }
 }

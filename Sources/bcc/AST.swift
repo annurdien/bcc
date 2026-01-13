@@ -2,16 +2,40 @@ private func indent(_ s: String) -> String {
     return s.split(separator: "\n").map { "  " + $0 }.joined(separator: "\n")
 }
 
+enum TopLevelItem: Equatable, CustomStringConvertible {
+    case function(FunctionDeclaration)
+    case variable(Declaration)
+    
+    var description: String {
+        switch self {
+        case .function(let f): return f.description
+        case .variable(let d): return d.description
+        }
+    }
+}
+
 struct Program: Equatable, CustomStringConvertible {
-    let functions: [FunctionDeclaration]
+    let items: [TopLevelItem]
+    
+    init(items: [TopLevelItem]) {
+        self.items = items
+    }
+
+    // Computed property for backward compatibility
+    var functions: [FunctionDeclaration] {
+        return items.compactMap { 
+            if case .function(let f) = $0 { return f }
+            return nil
+        }
+    }
     
     var function: FunctionDeclaration {
         return functions.last!
     }
 
     var description: String {
-        let funcsDesc = functions.map { $0.description }.joined(separator: "\n")
-        return "Program(\n\(indent(funcsDesc))\n)"
+        let itemsDesc = items.map { $0.description }.joined(separator: "\n")
+        return "Program(\n\(indent(itemsDesc))\n)"
     }
 }
 

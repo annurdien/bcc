@@ -5,13 +5,31 @@ private func indent(_ s: String) -> String {
 }
 
 struct AsmProgram: Equatable, CustomStringConvertible {
+    let globals: [AsmGlobal]
     let functions: [AsmFunction]
 
     var description: String {
+        let globalsDesc = globals.map { $0.description }.joined(separator: "\n")
         let funcsDesc = functions.map { $0.description }.joined(separator: "\n\n")
-        return "AsmProgram(\n\(indent(funcsDesc))\n)"
+        return "AsmProgram(\nGlobals:\n\(indent(globalsDesc))\n\nFunctions:\n\(indent(funcsDesc))\n)"
     }
 }
+
+struct AsmGlobal: Equatable, CustomStringConvertible {
+    let name: String
+    let initialValue: Int? // nil = uninitialized
+    let size: Int = 4
+    let alignment: Int = 4
+
+    var description: String {
+        if let val = initialValue {
+            return "Global(name: \(name), init: \(val))"
+        } else {
+            return "Global(name: \(name), uninit)"
+        }
+    }
+}
+
 struct AsmFunction: Equatable, CustomStringConvertible {
     let name: String
     var instructions: [AsmInstruction]
@@ -44,6 +62,7 @@ enum AsmOperand: Equatable, CustomStringConvertible {
     case register(AsmRegister)
     case pseudoregister(String)
     case stackOffset(Int)
+    case dataLabel(String)
 
     var description: String {
         switch self {
@@ -55,6 +74,8 @@ enum AsmOperand: Equatable, CustomStringConvertible {
             return "%\(name)"
         case .stackOffset(let offset):
             return "\(offset)(%rbp)"
+        case .dataLabel(let name):
+             return "\(name)(%rip)" // RIP-relative addressing for MacOS/Linux typically
         }
     }
 }

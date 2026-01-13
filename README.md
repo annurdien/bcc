@@ -34,6 +34,12 @@
     - [x] For (`for`)
     - [x] Break (`break`)
     - [x] Continue (`continue`)
+- [x] Stage 8 - Functions
+    - [x] Function Function Definition & Calling (Multi-argument)
+    - [x] System V ABI (Arguments in registers)
+- [x] Stage 9 - Global Variables
+    - [x] Global Variable Declaration
+    - [x] Global vs Local Scope (Shadowing)
 
 
 

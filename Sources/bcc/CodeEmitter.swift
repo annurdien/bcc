@@ -3,9 +3,60 @@ import Foundation
 struct CodeEmitter {
     
     func emit(program: AsmProgram) -> String {
-        return program.functions.map { emit(function: $0) }.joined(separator: "\n")
+        var output = ""
+        
+        // Data Section (Globals)
+        if !program.globals.isEmpty {
+            #if os(macOS)
+            output.append(".section __DATA,__data\n")
+            #else
+            output.append(".section .data\n")
+            #endif
+            
+            for global in program.globals {
+                output.append(emit(global: global))
+            }
+            output.append("\n")
+        }
+        
+        // Text Section (Code)
+        #if os(macOS)
+        output.append(".section __TEXT,__text\n")
+        #else
+        output.append(".section .text\n")
+        #endif
+        
+        for function in program.functions {
+            output.append(emit(function: function))
+            output.append("\n")
+        }
+        
+        #if os(Linux)
+        output.append(".section .note.GNU-stack,\"\",@progbits\n")
+        #endif
+        
+        return output
     }
 
+    private func emit(global: AsmGlobal) -> String {
+        var output = ""
+        let name = global.name
+        
+        #if os(macOS)
+        output.append(".globl _\(name)\n")
+        output.append(".p2align 2\n") // align 4
+        output.append("_\(name):\n")
+        #else
+        output.append(".globl \(name)\n")
+        output.append(".align 4\n")
+        output.append("\(name):\n")
+        #endif
+        
+        let value = global.initialValue ?? 0
+        output.append("  .long \(value)\n")
+        return output
+    }
+    
     private func emit(function: AsmFunction) -> String {
         var output = ""
         
@@ -23,10 +74,6 @@ struct CodeEmitter {
         for instruction in function.instructions {
             output.append(emit(instruction: instruction))
         }
-        
-        #if os(Linux)
-        output.append(".section .note.GNU-stack,\"\",@progbits\n")
-        #endif
         
         return output
     }
@@ -173,6 +220,13 @@ struct CodeEmitter {
         case .pseudoregister(let name):
             // This should not happen by the time we emit
             return "%\(name)_ERROR"
+            
+        case .dataLabel(let name):
+            #if os(macOS)
+            return "_\(name)(%rip)"
+            #else
+            return "\(name)(%rip)"
+            #endif
         }
     }
 }
