@@ -163,12 +163,16 @@ enum UnaryOperator: Equatable, CustomStringConvertible {
     case negate
     case complement
     case logicalNot
+    case postIncrement
+    case postDecrement
 
     var description: String {
         switch self {
         case .negate: return "Negate"
         case .complement: return "BitwiseNot"
         case .logicalNot: return "LogicalNot"
+        case .postIncrement: return "PostIncrement"
+        case .postDecrement: return "PostDecrement"
         }
     }
 }

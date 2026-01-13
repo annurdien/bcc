@@ -60,6 +60,7 @@ enum Token: Equatable {
     case minus
 
     case minusMinus
+    case plusPlus
 
     // Tokens with associated values
     case identifier(String)

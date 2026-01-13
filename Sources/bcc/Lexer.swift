@@ -115,6 +115,9 @@ struct Lexer {
             if peek() == "=" {
                advance()
                return .plusEqual
+            } else if peek() == "+" {
+                advance()
+                return .plusPlus
             }
             return .plus
         case "*":

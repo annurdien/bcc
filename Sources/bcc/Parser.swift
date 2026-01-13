@@ -185,11 +185,53 @@ struct Parser {
 
     private mutating func parseFactor() throws -> Expression {
         let token = peek()
-
+        var left: Expression
+        
         switch token {
         case .integerLiteral(let value):
             advance()
-            return .constant(value)
+            left = .constant(value)
+
+        case .identifier(let name):
+            advance()
+            if peek() == .openParen {
+                try consume(.openParen)
+                var args: [Expression] = []
+                if peek() != .closeParen {
+                    args.append(try parseExpression())
+                    while peek() == .comma {
+                         advance()
+                         args.append(try parseExpression())
+                    }
+                }
+                try consume(.closeParen)
+                left = .functionCall(name: name, arguments: args)
+            } else {
+                left = .variable(name)
+            }
+            
+        case .openParen:
+            advance()
+            left = try parseExpression()
+            try consume(.closeParen)
+            
+        case .plusPlus:
+            advance()
+            let inner = try parseFactor()
+            if case .variable(let name) = inner {
+                return .assignment(name: name, expression: .binary(.add, inner, .constant(1)))
+            } else {
+                throw ParserError.expectedExpression(found: token)
+            }
+        
+        case .minusMinus:
+            advance()
+            let inner = try parseFactor()
+            if case .variable(let name) = inner {
+                return .assignment(name: name, expression: .binary(.subtract, inner, .constant(1)))
+            } else {
+                throw ParserError.expectedExpression(found: token)
+            }
 
         case .minus:
             advance()
@@ -206,35 +248,33 @@ struct Parser {
             let innerExp = try parseFactor()
             return .unary(.logicalNot, innerExp)
         
-        case .openParen:
-            advance()
-            let innerExp = try parseExpression()
-            try consume(.closeParen)
-            return innerExp
-        
-        case .minusMinus:
-            throw ParserError.unexpectedToken(token)
-
-        case .identifier(let name):
-            advance()
-            if peek() == .openParen {
-                try consume(.openParen)
-                var args: [Expression] = []
-                if peek() != .closeParen {
-                    args.append(try parseExpression())
-                    while peek() == .comma {
-                         advance()
-                         args.append(try parseExpression())
-                    }
-                }
-                try consume(.closeParen)
-                return .functionCall(name: name, arguments: args)
-            }
-            return .variable(name)
-
         default:
             throw ParserError.expectedExpression(found: token)
         }
+        
+        // Postfix operators
+        while true {
+            let next = peek()
+            if next == .plusPlus {
+                advance()
+                if case .variable = left {
+                    left = .unary(.postIncrement, left)
+                } else {
+                    throw ParserError.expectedExpression(found: next)
+                }
+            } else if next == .minusMinus {
+                advance()
+                if case .variable = left {
+                    left = .unary(.postDecrement, left)
+                } else {
+                    throw ParserError.expectedExpression(found: next)
+                }
+            } else {
+                break
+            }
+        }
+        
+        return left
     }
 
     private mutating func parseStatement() throws -> Statement {

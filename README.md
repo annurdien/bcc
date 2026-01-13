@@ -58,6 +58,12 @@
 - [x] Stage 14 - Compound Assignment
     - [x] Arithmetic Compound (`+=`, `-=`, `*=`, `/=`, `%=`)
     - [x] Bitwise Compound (`&=`, `|=`, `^=`, `<<=`, `>>=`)
+- [x] Stage 15 - Increment & Decrement
+    - [x] Pre-increment (`++x`)
+    - [x] Post-increment (`x++`)
+    - [x] Pre-decrement (`--x`)
+    - [x] Post-decrement (`x--`)
+
 
 
 

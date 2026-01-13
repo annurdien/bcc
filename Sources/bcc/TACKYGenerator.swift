@@ -148,6 +148,7 @@ struct TACKYGenerator {
             case .negate: return -val
             case .complement: return ~val
             case .logicalNot: return (val == 0) ? 1 : 0
+            case .postIncrement, .postDecrement: throw SemanticError.nonConstantInitializer(contextName)
             }
         case .binary(let op, let lhs, let rhs):
             let lVal = try evaluateConstant(lhs, contextName: contextName)
@@ -410,6 +411,17 @@ struct TACKYGenerator {
             let type = getType(of: sourceValue)
             var resultType = type
             
+            if op == .postIncrement || op == .postDecrement {
+                let destValue = makeTemporary(type: type)
+                instructions.append(.copy(src: sourceValue, dest: destValue))
+                
+                let one: TackyValue = .constant(1)
+                let tackyOp: TackyBinaryOperator = (op == .postIncrement) ? .add : .subtract
+                
+                instructions.append(.binary(op: tackyOp, lhs: sourceValue, rhs: one, dest: sourceValue))
+                return destValue
+            }
+            
             let tackyOp: TackyUnaryOperator
             switch op {
                 case .negate: tackyOp = .negate
@@ -417,6 +429,7 @@ struct TACKYGenerator {
                 case .logicalNot: 
                     tackyOp = .logicalNot
                     resultType = .int
+                case .postIncrement, .postDecrement: fatalError("Handled above")
             }
 
             let destValue = makeTemporary(type: resultType)
