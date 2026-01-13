@@ -252,7 +252,8 @@ struct Parser {
             
             // Init clause (can be declaration or expression or empty)
             let initClause: ForInit
-            if peek() == .keywordInt {
+            // Check for type start (int, long, static)
+            if peek() == .keywordInt || peek() == .keywordLong || peek() == .keywordStatic {
                 initClause = .declaration(try parseDeclaration())
             } else {
                 if peek() == .semicolon {
@@ -292,6 +293,20 @@ struct Parser {
     }
     
     // declaration = ["static"] "int" identifier [ "=" expression ] ";"
+    private mutating func parseType() throws -> CType {
+        if peek() == .keywordInt {
+            advance()
+            return .int
+        } else if peek() == .keywordLong {
+            advance()
+            return .long
+        } else {
+             // Fallback for better error
+             throw ParserError.expectedToken("type specifier (int, long)", found: peek())
+        }
+    }
+
+    // declaration = ["static"] type identifier [ "=" expression ] ";"
     private mutating func parseDeclaration() throws -> Declaration {
         var isStatic = false
         if peek() == .keywordStatic {
@@ -299,7 +314,7 @@ struct Parser {
             isStatic = true
         }
         
-        try consume(.keywordInt)
+        let type = try parseType()
         
         guard case .identifier(let name) = peek() else {
             throw ParserError.expectedToken("identifier", found: peek())
@@ -313,11 +328,11 @@ struct Parser {
         }
         
         try consume(.semicolon)
-        return Declaration(name: name, initializer: initializer, isStatic: isStatic)
+        return Declaration(name: name, type: type, initializer: initializer, isStatic: isStatic)
     }
 
     private mutating func parseBlockItem() throws -> BlockItem {
-        if peek() == .keywordInt || peek() == .keywordStatic {
+        if peek() == .keywordInt || peek() == .keywordLong || peek() == .keywordStatic {
             return .declaration(try parseDeclaration())
         } else {
             return .statement(try parseStatement())
@@ -325,16 +340,12 @@ struct Parser {
     }
 
     private mutating func parseFunction() throws -> FunctionDeclaration {
-        // [static] int name ( ...
+        // [static] type name ( ...
         if peek() == .keywordStatic {
              advance()
-             // Warning: We update the Parser cursor, so we just consumed 'static'.
-             // Calling parseFunction implies we already decided it is a function.
-             // But FunctionDeclaration struct doesn't have isStatic yet. 
-             // We can ignore it for now (treat as global).
         }
     
-        try consume(.keywordInt)
+        let returnType = try parseType()
 
         let nameToken = peek()
         guard case .identifier(let name) = nameToken else {
@@ -345,6 +356,7 @@ struct Parser {
         try consume(.openParen)
         
         var parameters: [String] = []
+        var parameterTypes: [CType] = []
         if peek() != .closeParen {
             // Handle 'void' specially? int main(void)
             if peek() == .keywordVoid {
@@ -355,21 +367,24 @@ struct Parser {
                  }
             } else {
                  // Parse first parameter
-                 try consume(.keywordInt)
+                 let type1 = try parseType()
+                 
                  guard case .identifier(let paramName) = peek() else {
                      throw ParserError.expectedToken("identifier", found: peek())
                  }
                  advance()
                  parameters.append(paramName)
+                 parameterTypes.append(type1)
                  
                  while peek() == .comma {
                      advance()
-                     try consume(.keywordInt)
-                     guard case .identifier(let paramName) = peek() else {
+                     let typeN = try parseType()
+                     guard case .identifier(let paramNameN) = peek() else {
                          throw ParserError.expectedToken("identifier", found: peek())
                      }
                      advance()
-                     parameters.append(paramName)
+                     parameters.append(paramNameN)
+                     parameterTypes.append(typeN)
                  }
             }
         }
@@ -383,7 +398,7 @@ struct Parser {
 
         try consume(.closeBrace)
 
-        return FunctionDeclaration(name: name, parameters: parameters, body: .compound(bodyItems))
+        return FunctionDeclaration(name: name, returnType: returnType, parameters: parameters, parameterTypes: parameterTypes, body: .compound(bodyItems))
     }
 
     mutating func parse() throws -> Program {

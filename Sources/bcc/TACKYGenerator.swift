@@ -25,6 +25,15 @@ enum SemanticError: Error, CustomStringConvertible {
     }
 }
 
+extension CType {
+    var tackyType: TackyType {
+        switch self {
+        case .int: return .int
+        case .long: return .long
+        }
+    }
+}
+
 struct TACKYGenerator {
     private var tempCounter = 0
     private var labelCounter = 0
@@ -32,8 +41,8 @@ struct TACKYGenerator {
     // Stack of (continueLabel, breakLabel) for loop resolution
     private var loopStack: [(String, String)] = []
     
-    // Map function name to argument count
-    private var functionSignatures: [String: Int] = [:]
+    // Map function name to argument count and return type
+    private var functionSignatures: [String: (Int, TackyType)] = [:]
     
     private var variableMap: [String: String] = [:]
     private var localStaticMap: [String: String] = [:]
@@ -42,10 +51,14 @@ struct TACKYGenerator {
     private var globalVariables: Set<String> = []
     
     private var collectedGlobals: [TackyGlobal] = []
+    
+    private var currentVariableTypes: [String: TackyType] = [:]
+    private var globalTypes: [String: TackyType] = [:]
 
-    private mutating func makeTemporary() -> TackyValue {
+    private mutating func makeTemporary(type: TackyType = .int) -> TackyValue {
         let tempName = "tmp.\(tempCounter)"
         tempCounter += 1
+        currentVariableTypes[tempName] = type
         return .variable(tempName)
     }
 
@@ -55,8 +68,6 @@ struct TACKYGenerator {
         return label
     }
     
-    // Rename user variable to unique TACKY variable to handle shadowing later
-    // For now we just use the name directly
     private mutating func resolveVariable(name: String) throws -> TackyValue {
         if let staticName = localStaticMap[name] {
             return .global(staticName)
@@ -69,10 +80,27 @@ struct TACKYGenerator {
         }
         throw SemanticError.undeclaredVariable(name)
     }
+    
+    private func getType(of value: TackyValue) -> TackyType {
+        switch value {
+        case .constant(let i):
+            // Simple heuristic to distinguish int vs long constants by value logic 
+            // Better logic relies on AST types, but TackyValue lossy.
+            if i > 2147483647 || i < -2147483648 {
+                return .long
+            }
+            return .int
+        case .variable(let name):
+            return currentVariableTypes[name] ?? .int
+        case .global(let name):
+            return globalTypes[name] ?? .int
+        }
+    }
 
     mutating func generate(program: Program) throws -> TackyProgram {
         var tackyFunctions: [TackyFunction] = []
         collectedGlobals = []
+        globalTypes.removeAll()
         
         functionSignatures.removeAll()
         globalVariables.removeAll()
@@ -83,7 +111,7 @@ struct TACKYGenerator {
                 if functionSignatures[function.name] != nil || globalVariables.contains(function.name) {
                      throw SemanticError.functionRedefinition(function.name)
                 }
-                functionSignatures[function.name] = function.parameters.count
+                functionSignatures[function.name] = (function.parameters.count, function.returnType.tackyType)
                 tackyFunctions.append(try generate(function: function))
                 
             case .variable(let decl):
@@ -98,8 +126,10 @@ struct TACKYGenerator {
                     initVal = nil
                 }
                 
+                let tType = decl.type.tackyType
                 globalVariables.insert(decl.name)
-                collectedGlobals.append(TackyGlobal(name: decl.name, initialValue: initVal, isStatic: decl.isStatic))
+                globalTypes[decl.name] = tType
+                collectedGlobals.append(TackyGlobal(name: decl.name, type: tType, initialValue: initVal, isStatic: decl.isStatic))
             }
         }
         
@@ -124,7 +154,7 @@ struct TACKYGenerator {
             case .add: return lVal + rVal
             case .subtract: return lVal - rVal
             case .multiply: return lVal * rVal
-            case .divide: return (rVal == 0) ? 0 : (lVal / rVal) // Avoid crash??
+            case .divide: return (rVal == 0) ? 0 : (lVal / rVal) 
             case .equal: return (lVal == rVal) ? 1 : 0
             case .notEqual: return (lVal != rVal) ? 1 : 0
             case .lessThan: return (lVal < rVal) ? 1 : 0
@@ -142,7 +172,6 @@ struct TACKYGenerator {
                 return try evaluateConstant(elseExpr, contextName: contextName)
             }
         default:
-             // variables, assignments, function calls are not constant
              throw SemanticError.nonConstantInitializer(contextName)
         }
     }
@@ -150,22 +179,24 @@ struct TACKYGenerator {
     private mutating func generate(function: FunctionDeclaration) throws -> TackyFunction {
         var instructions: [TackyInstruction] = []
         
-        // Reset state for new function
         variableMap.removeAll() 
         localStaticMap.removeAll()
         declaredVariables.removeAll()
+        currentVariableTypes.removeAll()
         
-        // Add parameters to declared variables
-        for param in function.parameters {
-            declaredVariables.insert(param)
+        // Add parameters
+        for i in 0..<function.parameters.count {
+            let paramName = function.parameters[i]
+            let paramType = function.parameterTypes.indices.contains(i) ? function.parameterTypes[i] : .int
+            declaredVariables.insert(paramName)
+            currentVariableTypes[paramName] = paramType.tackyType
         }
         
         try generate(statement: function.body, into: &instructions)
         
-        // Add a default return 0 just in case (e.g. implicitly at end of void/int func)
         instructions.append(.return(.constant(0)))
         
-        return TackyFunction(name: function.name, parameters: function.parameters, body: instructions)
+        return TackyFunction(name: function.name, parameters: function.parameters, variableTypes: currentVariableTypes, body: instructions)
     }
 
     private mutating func generate(blockItem: BlockItem, into instructions: inout [TackyInstruction]) throws {
@@ -173,29 +204,28 @@ struct TACKYGenerator {
         case .statement(let stmt):
             try generate(statement: stmt, into: &instructions)
         case .declaration(let decl):
+            let tType = decl.type.tackyType
             if decl.isStatic {
-                // Static Local Variable
                 let uniqueName = "\(decl.name).\(labelCounter)_static" // e.g. x.0_static
-                _ = makeLabel() // Increment counter
+                _ = makeLabel() 
                 
                 let initVal: Int?
                 if let expr = decl.initializer {
                     initVal = try evaluateConstant(expr, contextName: decl.name)
                 } else {
-                    initVal = nil // Uninitialized static is 0 (BSS)
+                    initVal = nil 
                 }
                 
-                collectedGlobals.append(TackyGlobal(name: uniqueName, initialValue: initVal, isStatic: true))
+                collectedGlobals.append(TackyGlobal(name: uniqueName, type: tType, initialValue: initVal, isStatic: true))
+                globalTypes[uniqueName] = tType
                 localStaticMap[decl.name] = uniqueName
             
             } else {
-                // Regular Local Variable
                 declaredVariables.insert(decl.name)
+                currentVariableTypes[decl.name] = tType
                 if let initExpr = decl.initializer {
                     let initVal = try generate(expression: initExpr, into: &instructions)
                     instructions.append(.copy(src: initVal, dest: .variable(decl.name)))
-                } else {
-                    // Uninitialized int (undefined value on stack)
                 }
             }
         }
@@ -220,16 +250,13 @@ struct TACKYGenerator {
             let elseLabel = makeLabel(suffix: "_else")
             let endLabel = makeLabel(suffix: "_end")
             
-            // If cond is false (0), jump to else (or end if no else)
             instructions.append(.jumpIfZero(condition: condVal, target: elseStmt != nil ? elseLabel : endLabel))
             
-            // Then block
             try generate(statement: thenStmt, into: &instructions)
             if elseStmt != nil {
-                 instructions.append(.jump(target: endLabel)) // Skip else block
+                 instructions.append(.jump(target: endLabel)) 
             }
             
-            // Else block
             if let elseStmt = elseStmt {
                 instructions.append(.label(elseLabel))
                 try generate(statement: elseStmt, into: &instructions)
@@ -251,7 +278,7 @@ struct TACKYGenerator {
             
         case .doWhile(let body, let cond):
             let startLabel = makeLabel(suffix: "_do_start")
-            let continueLabel = makeLabel(suffix: "_do_continue") // used for 'continue'
+            let continueLabel = makeLabel(suffix: "_do_continue") 
             let breakLabel = makeLabel(suffix: "_do_break")
             
             loopStack.append((continueLabel, breakLabel))
@@ -261,7 +288,6 @@ struct TACKYGenerator {
             
             instructions.append(.label(continueLabel))
             let condVal = try generate(expression: cond, into: &instructions)
-            // If true, jump back to start
             instructions.append(.jumpIfNotZero(condition: condVal, target: startLabel))
             
             instructions.append(.label(breakLabel))
@@ -270,13 +296,6 @@ struct TACKYGenerator {
         case .while(let cond, let body):
             let continueLabel = makeLabel(suffix: "_while_continue")
             let breakLabel = makeLabel(suffix: "_while_break")
-            // startLabel not strictly needed if we jump to continueLabel then eval cond
-            // But typical while: 
-            // label_continue:
-            //   if (!cond) goto label_break
-            //   body
-            //   goto label_continue
-            // label_break:
             
             loopStack.append((continueLabel, breakLabel))
             
@@ -296,7 +315,6 @@ struct TACKYGenerator {
             let continueLabel = makeLabel(suffix: "_for_continue")
             let breakLabel = makeLabel(suffix: "_for_break")
             
-            // 1. Initialization
             switch initClause {
             case .declaration(let decl):
                 try generate(blockItem: .declaration(decl), into: &instructions)
@@ -310,16 +328,13 @@ struct TACKYGenerator {
             
             instructions.append(.label(startLabel))
             
-            // 2. Condition
             if let cond = cond {
                 let condVal = try generate(expression: cond, into: &instructions)
                 instructions.append(.jumpIfZero(condition: condVal, target: breakLabel))
             }
             
-            // 3. Body
             try generate(statement: body, into: &instructions)
             
-            // 4. Continue target (Post-expression)
             instructions.append(.label(continueLabel))
             if let post = post {
                 _ = try generate(expression: post, into: &instructions)
@@ -341,7 +356,7 @@ struct TACKYGenerator {
             
         case .conditional(let cond, let thenExpr, let elseExpr):
             let condVal = try generate(expression: cond, into: &instructions)
-            let result = makeTemporary()
+            let result = makeTemporary(type: .long) // Use long to be safe, implicit cast via copy
             let elseLabel = makeLabel(suffix: "_ternary_else")
             let endLabel = makeLabel(suffix: "_ternary_end")
             
@@ -359,7 +374,7 @@ struct TACKYGenerator {
             return result
         
         case .functionCall(let name, let args):
-            guard let expectedCount = functionSignatures[name] else {
+            guard let (expectedCount, returnType) = functionSignatures[name] else {
                 throw SemanticError.undeclaredFunction(name)
             }
             
@@ -372,7 +387,7 @@ struct TACKYGenerator {
                 argValues.append(try generate(expression: arg, into: &instructions))
             }
             
-            let dest = makeTemporary()
+            let dest = makeTemporary(type: returnType)
             instructions.append(.call(name: name, args: argValues, dest: dest))
             return dest
 
@@ -384,82 +399,99 @@ struct TACKYGenerator {
 
         case .unary(let op, let innerExpression):
             let sourceValue = try generate(expression: innerExpression, into: &instructions)
-            let destValue = makeTemporary()
-
-            let tackyOp: TackyUnaryOperator = switch op {
-                case .negate: .negate
-                case .complement: .complement
-                case .logicalNot: .logicalNot
+            let type = getType(of: sourceValue)
+            var resultType = type
+            
+            let tackyOp: TackyUnaryOperator
+            switch op {
+                case .negate: tackyOp = .negate
+                case .complement: tackyOp = .complement
+                case .logicalNot: 
+                    tackyOp = .logicalNot
+                    resultType = .int
             }
 
+            let destValue = makeTemporary(type: resultType)
             instructions.append(.unary(op: tackyOp, src: sourceValue, dest: destValue))
             return destValue
 
         case .binary(let op, let lhsExp, let rhsExp):
-            switch op {
-            case .logicalAnd:
-                let dest = makeTemporary()
-                let falseLabel = makeLabel(suffix: "_false")
-                let endLabel = makeLabel(suffix: "_end")
-                
-                let lhs = try generate(expression: lhsExp, into: &instructions)
-                instructions.append(.jumpIfZero(condition: lhs, target: falseLabel))
-                
-                let rhs = try generate(expression: rhsExp, into: &instructions)
-                instructions.append(.jumpIfZero(condition: rhs, target: falseLabel))
-                
-                instructions.append(.copy(src: .constant(1), dest: dest))
-                instructions.append(.jump(target: endLabel))
-                
-                instructions.append(.label(falseLabel))
-                instructions.append(.copy(src: .constant(0), dest: dest))
-                
-                instructions.append(.label(endLabel))
-                return dest
-                
-            case .logicalOr:
-                let dest = makeTemporary()
-                let trueLabel = makeLabel(suffix: "_true")
-                let endLabel = makeLabel(suffix: "_end")
-                
-                let lhs = try generate(expression: lhsExp, into: &instructions)
-                instructions.append(.jumpIfNotZero(condition: lhs, target: trueLabel))
-                
-                let rhs = try generate(expression: rhsExp, into: &instructions)
-                instructions.append(.jumpIfNotZero(condition: rhs, target: trueLabel))
-                
-                instructions.append(.copy(src: .constant(0), dest: dest))
-                instructions.append(.jump(target: endLabel))
-                
-                instructions.append(.label(trueLabel))
-                instructions.append(.copy(src: .constant(1), dest: dest))
-                
-                instructions.append(.label(endLabel))
-                return dest
-                
-            default:
-                let lhs = try generate(expression: lhsExp, into: &instructions)
-                let rhs = try generate(expression: rhsExp, into: &instructions)
-                let dest = makeTemporary()
-
-                let tackyOp: TackyBinaryOperator = switch op {
-                    case .add: .add
-                    case .subtract: .subtract
-                    case .multiply: .multiply
-                    case .divide: .divide
-                    case .equal: .equal
-                    case .notEqual: .notEqual
-                    case .lessThan: .lessThan
-                    case .lessThanOrEqual: .lessThanOrEqual
-                    case .greaterThan: .greaterThan
-                    case .greaterThanOrEqual: .greaterThanOrEqual
-                    case .logicalAnd, .logicalOr:
-                         fatalError("Unreachable")
-                }
-
-                instructions.append(.binary(op: tackyOp, lhs: lhs, rhs: rhs, dest: dest))
-                return dest
+            if op == .logicalAnd || op == .logicalOr {
+                 // Logical always returns int
+                 let dest = makeTemporary(type: .int)
+                 let endLabel = makeLabel(suffix: "_end")
+                 
+                 if op == .logicalAnd {
+                    let falseLabel = makeLabel(suffix: "_false")
+                    let lhs = try generate(expression: lhsExp, into: &instructions)
+                    instructions.append(.jumpIfZero(condition: lhs, target: falseLabel))
+                    let rhs = try generate(expression: rhsExp, into: &instructions)
+                    instructions.append(.jumpIfZero(condition: rhs, target: falseLabel))
+                    instructions.append(.copy(src: .constant(1), dest: dest))
+                    instructions.append(.jump(target: endLabel))
+                    instructions.append(.label(falseLabel))
+                    instructions.append(.copy(src: .constant(0), dest: dest))
+                 } else { // Or
+                    let trueLabel = makeLabel(suffix: "_true")
+                    let lhs = try generate(expression: lhsExp, into: &instructions)
+                    instructions.append(.jumpIfNotZero(condition: lhs, target: trueLabel))
+                    let rhs = try generate(expression: rhsExp, into: &instructions)
+                    instructions.append(.jumpIfNotZero(condition: rhs, target: trueLabel))
+                    instructions.append(.copy(src: .constant(0), dest: dest))
+                    instructions.append(.jump(target: endLabel))
+                    instructions.append(.label(trueLabel))
+                    instructions.append(.copy(src: .constant(1), dest: dest))
+                 }
+                 instructions.append(.label(endLabel))
+                 return dest
             }
+        
+            let lhs = try generate(expression: lhsExp, into: &instructions)
+            let rhs = try generate(expression: rhsExp, into: &instructions)
+            
+            let lType = getType(of: lhs)
+            let rType = getType(of: rhs)
+            
+            var finalL = lhs
+            var finalR = rhs
+            let resultType: TackyType
+            
+            // Promote to long if either is long
+            if lType == .long || rType == .long {
+                resultType = .long
+                if lType == .int {
+                    let tmp = makeTemporary(type: .long)
+                    instructions.append(.copy(src: lhs, dest: tmp)) // implicit sext
+                    finalL = tmp
+                }
+                if rType == .int {
+                    let tmp = makeTemporary(type: .long)
+                    instructions.append(.copy(src: rhs, dest: tmp)) // implicit sext
+                    finalR = tmp
+                }
+            } else {
+                resultType = .int
+            }
+
+            let tackyOp: TackyBinaryOperator
+            var isComparison = false
+            switch op {
+                case .add: tackyOp = .add
+                case .subtract: tackyOp = .subtract
+                case .multiply: tackyOp = .multiply
+                case .divide: tackyOp = .divide
+                case .equal: tackyOp = .equal; isComparison = true
+                case .notEqual: tackyOp = .notEqual; isComparison = true
+                case .lessThan: tackyOp = .lessThan; isComparison = true
+                case .lessThanOrEqual: tackyOp = .lessThanOrEqual; isComparison = true
+                case .greaterThan: tackyOp = .greaterThan; isComparison = true
+                case .greaterThanOrEqual: tackyOp = .greaterThanOrEqual; isComparison = true
+                default: fatalError("Unreach")
+            }
+
+            let dest = makeTemporary(type: isComparison ? .int : resultType)
+            instructions.append(.binary(op: tackyOp, lhs: finalL, rhs: finalR, dest: dest))
+            return dest
         }
     }
 }

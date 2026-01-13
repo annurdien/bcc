@@ -46,18 +46,24 @@ struct CodeEmitter {
         if !global.isStatic {
             output.append(".globl _\(name)\n")
         }
-        output.append(".p2align 2\n") // align 4
+        let align = global.size == 8 ? 3 : 2
+        output.append(".p2align \(align)\n") 
         output.append("_\(name):\n")
         #else
         if !global.isStatic {
             output.append(".globl \(name)\n")
         }
-        output.append(".align 4\n")
+        let align = global.alignment
+        output.append(".align \(align)\n")
         output.append("\(name):\n")
         #endif
         
         let value = global.initialValue ?? 0
-        output.append("  .long \(value)\n")
+        if global.size == 8 {
+             output.append("  .quad \(value)\n")
+        } else {
+             output.append("  .long \(value)\n")
+        }
         return output
     }
     
@@ -94,6 +100,18 @@ struct CodeEmitter {
             return "  addq \(emit(operand: src, size: .q)), \(emit(operand: dest, size: .q))\n"
         case .subq(let src, let dest):
             return "  subq \(emit(operand: src, size: .q)), \(emit(operand: dest, size: .q))\n"
+        case .imulq(let src, let dest):
+            return "  imulq \(emit(operand: src, size: .q)), \(emit(operand: dest, size: .q))\n"
+        case .idivq(let src):
+            return "  idivq \(emit(operand: src, size: .q))\n"
+        case .negq(let dest):
+            return "  negq \(emit(operand: dest, size: .q))\n"
+        case .notq(let dest):
+            return "  notq \(emit(operand: dest, size: .q))\n"
+        case .cmpq(let src, let dest):
+            return "  cmpq \(emit(operand: src, size: .q)), \(emit(operand: dest, size: .q))\n"
+        case .cqo:
+            return "  cqo\n"
         case .movl(let src, let dest):
             return "  movl \(emit(operand: src, size: .l)), \(emit(operand: dest, size: .l))\n"
         case .addl(let src, let dest):
@@ -168,11 +186,17 @@ struct CodeEmitter {
                 }
             case .rbp: return size == .q ? "%rbp" : "%ebp"
             case .rsp: return size == .q ? "%rsp" : "%esp"
-            case .r10:
+            case .r10, .r10d:
                 switch size {
                 case .q: return "%r10"
                 case .l: return "%r10d"
                 case .b: return "%r10b"
+                }
+            case .r11, .r11d:
+                switch size {
+                case .q: return "%r11"
+                case .l: return "%r11d"
+                case .b: return "%r11b"
                 }
             case .rdi, .edi:
                 switch size {

@@ -204,6 +204,7 @@ struct Lexer {
 
         switch identifierString {
         case "int": return .keywordInt
+        case "long": return .keywordLong
         case "return": return .keywordReturn
         case "void": return .keywordVoid
         case "if": return .keywordIf

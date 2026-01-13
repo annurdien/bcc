@@ -2,6 +2,18 @@ private func indent(_ s: String) -> String {
     return s.split(separator: "\n").map { "  " + $0 }.joined(separator: "\n")
 }
 
+enum CType: Equatable, CustomStringConvertible {
+    case int
+    case long
+    
+    var description: String {
+        switch self {
+        case .int: return "int"
+        case .long: return "long"
+        }
+    }
+}
+
 enum TopLevelItem: Equatable, CustomStringConvertible {
     case function(FunctionDeclaration)
     case variable(Declaration)
@@ -41,26 +53,39 @@ struct Program: Equatable, CustomStringConvertible {
 
 struct FunctionDeclaration: Equatable, CustomStringConvertible {
     let name: String
-    let parameters: [String]
+    let returnType: CType 
+    let parameters: [String] 
+    let parameterTypes: [CType] // Added parallel array to minimize impact, though tuple suggests better design. 
+    // Actually, keeping separate arrays runs risk of desync. 
+    // Let's use parameters: [String] for names, and just add parameterTypes.
+    // Or just change parameters to [(CType, String)]?
+    // Let's go with just adding parameterTypes for now to be safe with existing code iterating parameters.
+    // Wait, if I add `parameterTypes`, I must init it.
     let body: Statement
 
     var description: String {
-        let paramsDesc = parameters.joined(separator: ", ")
-        return "Function(name: \"\(name)\", params: [\(paramsDesc)], body:\n\(indent(body.description))\n)"
+        var paramsDesc = ""
+        for i in 0..<parameters.count {
+            if i > 0 { paramsDesc += ", " }
+            let type = i < parameterTypes.count ? parameterTypes[i] : .int
+            paramsDesc += "\(type) \(parameters[i])"
+        }
+        return "Function(name: \"\(name)\", return: \(returnType), params: [\(paramsDesc)], body:\n\(indent(body.description))\n)"
     }
 }
 
 struct Declaration: Equatable, CustomStringConvertible {
     let name: String
+    let type: CType
     let initializer: Expression?
     let isStatic: Bool
 
     var description: String {
         let storage = isStatic ? "Static " : ""
         if let initExpr = initializer {
-            return "\(storage)Declare(name: \(name), init:\n\(indent(initExpr.description)))"
+            return "\(storage)\(type) \(name) = \(initExpr);"
         } else {
-            return "\(storage)Declare(name: \(name))"
+            return "\(storage)\(type) \(name);"
         }
     }
 }

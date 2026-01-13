@@ -3,6 +3,7 @@ import Foundation
 enum Token: Equatable {
     // Keywords
     case keywordInt
+    case keywordLong
     case keywordReturn
     case keywordVoid
     case keywordIf

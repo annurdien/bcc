@@ -4,6 +4,25 @@ private func indent(_ s: String) -> String {
     return s.split(separator: "\n").map { "  " + $0 }.joined(separator: "\n")
 }
 
+enum TackyType: Equatable, CustomStringConvertible {
+    case int
+    case long
+    
+    var size: Int {
+        switch self {
+        case .int: return 4
+        case .long: return 8
+        }
+    }
+    
+    var description: String {
+        switch self {
+        case .int: return "Int"
+        case .long: return "Long"
+        }
+    }
+}
+
 struct TackyProgram: Equatable, CustomStringConvertible {
     let globals: [TackyGlobal]
     let functions: [TackyFunction]
@@ -22,15 +41,16 @@ struct TackyProgram: Equatable, CustomStringConvertible {
 
 struct TackyGlobal: Equatable, CustomStringConvertible {
     let name: String
+    let type: TackyType
     let initialValue: Int? // nil for uninitialized (BSS)
     let isStatic: Bool
     
     var description: String {
         let visibility = isStatic ? "Static" : "Global"
         if let val = initialValue {
-            return "\(visibility)(name: \(name), init: \(val))"
+            return "\(visibility)(\(type), name: \(name), init: \(val))"
         } else {
-            return "\(visibility)(name: \(name), uninit)"
+            return "\(visibility)(\(type), name: \(name), uninit)"
         }
     }
 }
@@ -38,10 +58,12 @@ struct TackyGlobal: Equatable, CustomStringConvertible {
 struct TackyFunction: Equatable, CustomStringConvertible {
     let name: String
     let parameters: [String]
+    let variableTypes: [String: TackyType] // Map name -> type
     let body: [TackyInstruction]
 
     var description: String {
         let bodyDesc = body.map { $0.description }.joined(separator: "\n")
+        // Just print body
         return "TackyFunction(name: \(name), params: \(parameters)) {\n\(indent(bodyDesc))\n}"
     }
 }

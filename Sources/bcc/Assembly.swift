@@ -17,17 +17,25 @@ struct AsmProgram: Equatable, CustomStringConvertible {
 
 struct AsmGlobal: Equatable, CustomStringConvertible {
     let name: String
-    let initialValue: Int? // nil = uninitialized
+    let initialValue: Int? 
     let isStatic: Bool
-    let size: Int = 4
-    let alignment: Int = 4
+    let size: Int
+    let alignment: Int
+
+    init(name: String, initialValue: Int?, isStatic: Bool, size: Int = 4, alignment: Int = 4) {
+        self.name = name
+        self.initialValue = initialValue
+        self.isStatic = isStatic
+        self.size = size
+        self.alignment = alignment
+    }
 
     var description: String {
         let visibility = isStatic ? "Static" : "Global"
         if let val = initialValue {
-            return "\(visibility)(name: \(name), init: \(val))"
+            return "\(visibility)(name: \(name), init: \(val), size: \(size))"
         } else {
-            return "\(visibility)(name: \(name), uninit)"
+            return "\(visibility)(name: \(name), uninit, size: \(size))"
         }
     }
 }
@@ -53,6 +61,7 @@ enum AsmRegister: String, Equatable, CustomStringConvertible {
     case r8, r8d
     case r9, r9d
     case r10, r10d
+    case r11, r11d
 
     var description: String {
         "%" + self.rawValue
@@ -89,6 +98,12 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
     case movq(AsmOperand, AsmOperand) // 64-bit move
     case addq(AsmOperand, AsmOperand) // 64-bit add
     case subq(AsmOperand, AsmOperand) // 64-bit subtract
+    case imulq(AsmOperand, AsmOperand)
+    case idivq(AsmOperand)
+    case negq(AsmOperand)
+    case notq(AsmOperand)
+    case cmpq(AsmOperand, AsmOperand)
+    case cqo // Sign extend RAX to RDX:RAX
 
     // Operations (32-bit)
     case movl(AsmOperand, AsmOperand)
@@ -125,6 +140,18 @@ enum AsmInstruction: Equatable, CustomStringConvertible {
             return "addq \(src.description), \(dest.description)"
         case .subq(let src, let dest):
             return "subq \(src.description), \(dest.description)"
+        case .imulq(let src, let dest):
+            return "imulq \(src.description), \(dest.description)"
+        case .idivq(let op):
+            return "idivq \(op.description)"
+        case .negq(let op):
+            return "negq \(op.description)"
+        case .notq(let op):
+            return "notq \(op.description)"
+        case .cmpq(let src, let dest):
+            return "cmpq \(src.description), \(dest.description)"
+        case .cqo:
+            return "cqo"
         case .movl(let src, let dest):
             return "movl \(src.description), \(dest.description)"
         case .addl(let src, let dest):
